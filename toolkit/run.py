@@ -31,13 +31,9 @@ def run_108():
         subprocess.run(cc,shell=True)
     runc = "cmd.exe /c ..\\\\target\\\\release\\\\hokudai-hitachi.exe" if len(argv) == 1 else "../target/release/hokudai-hitachi"
     subprocess.run("pwd",shell=True)
-    print()
     subprocess.run("ls ..",shell=True)
-    print()
     subprocess.run("ls ../target",shell=True)
-    print()
     subprocess.run("ls ../target/release",shell=True)
-    print()
     subprocess.run("find ../target/release/hokudai-hitachi",shell=True)
     cnt = 0
     error = False
