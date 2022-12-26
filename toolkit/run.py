@@ -33,12 +33,12 @@ def run_108():
     for i in range(108):
         test = f"in/in{i:04d}.txt"
         proc = subprocess.run(f"./judge.sh {test} out/out{i:04d}.json {runc}",shell=True,stdout=PIPE,stderr=PIPE,encoding="utf-8")
-        if proc.returncode != 0:
+        if proc.returncode != 0 and not proc.stderr.split()[-1].startswith("score"):
             print(f"Testcase {i}({test}): ERROR")
             print(proc.stdout)
             print(proc.stderr,file=stderr)
             error = True
-            break
+            exit(1)
         else:
             score = proc.stderr.split()[-1]
             score = int(score.replace("score:",""))
