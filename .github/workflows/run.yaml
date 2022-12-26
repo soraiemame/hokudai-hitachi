@@ -1,12 +1,20 @@
-name: learn-github-actions
+name: run-code
 on: [push]
 jobs:
-  check-bats-version:
+  compile-run:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - name: Setup | Checkout
+        uses: actions/checkout@v3
+      - name: Setup | Rust
+        uses: ATiltedTree/setup-rust@v1.0.5
         with:
-          node-version: '14'
-      - run: npm install -g bats
-      - run: bats -v
+          rust-version: stable
+      - name: Setup | Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+      - name: Compile code
+        run: cargo build --release
+      - name: run test
+        run: cd toolkit && python run.py github

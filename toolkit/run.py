@@ -1,6 +1,7 @@
 from subprocess import PIPE
 import subprocess
 from glob import glob
+from sys import argv
 
 
 def once():
@@ -24,9 +25,11 @@ def run_108():
     print("clear...")
     subprocess.run("rm -rf out",shell=True)
     subprocess.run("mkdir out",shell=True)
-    subprocess.run("cmd.exe /c cargo build --release",shell=True,stdout=PIPE,stderr=PIPE)
-    runc = "cmd.exe /c ..\\\\target\\\\release\\\\hokudai-hitachi.exe"
-    print("Compiling code...")
+    if len(argv) == 1:
+        print("Compiling code...")
+        cc = "cmd.exe /c cargo build --release"
+        subprocess.run(cc,shell=True)
+    runc = "cmd.exe /c ..\\\\target\\\\release\\\\hokudai-hitachi.exe" if len(argv) == 1 else "../target/release/hokudai-hitachi"
     subprocess
     cnt = 0
     error = False
