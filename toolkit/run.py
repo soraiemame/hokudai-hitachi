@@ -31,13 +31,20 @@ def run_108():
         subprocess.run(cc,shell=True)
     runc = "cmd.exe /c ..\\\\target\\\\release\\\\hokudai-hitachi.exe" if len(argv) == 1 else "../target/release/hokudai-hitachi"
     subprocess.run("pwd",shell=True)
+    print()
     subprocess.run("ls ..",shell=True)
+    print()
     subprocess.run("ls ../target",shell=True)
+    print()
     subprocess.run("ls ../target/release",shell=True)
+    print()
+    subprocess.run("find ../target/release/hokudai-hitachi",shell=True)
     cnt = 0
     error = False
-    for (i,test) in enumerate(glob("in/*")):
-        proc = subprocess.run(f"./judge.sh {test} out/out{i:04d}.json {runc}",shell=True,stdout=PIPE,stderr=PIPE,encoding="utf-8")
+    for i in range(108):
+        test = f"in/in{i:04d}.txt"
+        # proc = subprocess.run(f"./judge.sh {test} out/out{i:04d}.json {runc}",shell=True,stdout=PIPE,stderr=PIPE,encoding="utf-8")
+        proc = subprocess.run(f"./judge.sh {test} out/out{i:04d}.json {runc}",shell=True,encoding="utf-8")
         if proc.returncode != 0:
             print(f"Testcase {i}({test}): ERROR")
             error = True
