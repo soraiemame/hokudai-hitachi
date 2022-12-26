@@ -1,0 +1,57 @@
+type = "A"
+seed = 10984047872124365231
+map_size = 2048
+map_node_ratio = "0.45*(0.5**where(map_max_depth>5,map_max_depth-5,0))"
+unit_dist = 1
+map_vertex_num_hard_limit = [[150,2000]]
+map_edge_num_hard_limit_coeff = [[1.33333333333333, 2.0]]
+worker_processable_num = "1+3*x"
+worker_processable_type = "3*x"
+worker_max_task_processing_num = "30+71*x"
+job_type = "3*x"
+task_num = "500+1000*x"
+job_unfinished_penalty = ["0.98+0.02*x", "0.91+0.02*x"]
+mandatory_job_num = "worker_num*T_max/300*x"
+reward_interval = 25
+reward_duration = "(T_max-100+1)*x+100"
+reward_stddev = "0.3+0.08*x"
+reward_value = "1000000+1000001*x"
+reward_upper_hard_limit = 10000000
+reward_lower_hard_limit = 1
+fundamental_weather_interval_length = "5+16*x"
+job_dependency_num = "5*x"
+job_max_dep = 3
+map_area_ratio = "0.3+0.4*x"
+map_peak_num = 20
+schedule_penalty_max = "0.005+0.02*x"
+schedule_penalty_decay = "1-0.001*(30.0)**x"
+schedule_score_scale = "5**(-1+2*x)"
+weather_dependency = "0.15*x"
+weather_stationary_dist = [[
+  0.21,
+  0.25,
+  0.10,
+  0.31,
+  0.102,
+  0.023,
+  0.005,
+]]
+weather_prob_nondiag_cutoff_range = 2
+weather_prob_sharpness = [2.0,1.5,1.0]
+weather_prob_eps = 1e-8
+weather_prob_centralize = true
+weather_limit_const = [[
+  0,
+  1,
+  2,
+  3,
+  10,
+  14,
+  20,
+]]
+T_max = [1000]
+map_max_depth = [5]
+worker_num = [5]
+job_num = [500]
+
+
