@@ -42,8 +42,9 @@ def run_108():
         else:
             score = proc.stderr.split()[-1]
             score = int(score.replace("score:",""))
-            print(f"Testcase {i}({test}) score: {score:,}")
-            print(f"Testcase {i}({test}) score: {score:,}",file=open("out/scores.txt","a"))
+            spaces = " " * (4 - len(str(i)))
+            print(f"Testcase {i}({test}){spaces}score: {score:,}")
+            print(f"Testcase {i}({test}){spaces}score: {score:,}",file=open("out/scores.txt","a"))
             cnt += score
     if error:
         print("Error occured.")
