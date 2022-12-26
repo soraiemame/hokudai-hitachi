@@ -30,7 +30,10 @@ def run_108():
         cc = "cmd.exe /c cargo build --release"
         subprocess.run(cc,shell=True)
     runc = "cmd.exe /c ..\\\\target\\\\release\\\\hokudai-hitachi.exe" if len(argv) == 1 else "../target/release/hokudai-hitachi"
-    subprocess
+    subprocess.run("pwd",shell=True)
+    subprocess.run("ls ..",shell=True)
+    subprocess.run("ls ../target",shell=True)
+    subprocess.run("ls ../target/release",shell=True)
     cnt = 0
     error = False
     for (i,test) in enumerate(glob("in/*")):
