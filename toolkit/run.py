@@ -1,8 +1,6 @@
 from subprocess import PIPE
 import subprocess
-from glob import glob
 from sys import argv
-
 
 def once():
     print("gen")
@@ -30,17 +28,11 @@ def run_108():
         cc = "cmd.exe /c cargo build --release"
         subprocess.run(cc,shell=True)
     runc = "cmd.exe /c ..\\\\target\\\\release\\\\hokudai-hitachi.exe" if len(argv) == 1 else "../target/release/hokudai-hitachi"
-    subprocess.run("pwd",shell=True)
-    subprocess.run("ls ..",shell=True)
-    subprocess.run("ls ../target",shell=True)
-    subprocess.run("ls ../target/release",shell=True)
-    subprocess.run("find ../target/release/hokudai-hitachi",shell=True)
     cnt = 0
     error = False
     for i in range(108):
         test = f"in/in{i:04d}.txt"
-        # proc = subprocess.run(f"./judge.sh {test} out/out{i:04d}.json {runc}",shell=True,stdout=PIPE,stderr=PIPE,encoding="utf-8")
-        proc = subprocess.run(f"./judge.sh {test} out/out{i:04d}.json {runc}",shell=True,encoding="utf-8")
+        proc = subprocess.run(f"./judge.sh {test} out/out{i:04d}.json {runc}",shell=True,stdout=PIPE,stderr=PIPE,encoding="utf-8")
         if proc.returncode != 0:
             print(f"Testcase {i}({test}): ERROR")
             error = True

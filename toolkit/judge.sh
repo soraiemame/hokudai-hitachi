@@ -33,4 +33,3 @@ EXEC_NAME="${BUILD_DIR}/judge"
 
 
 stdbuf -i0 -o0 -e0 ${EXEC_NAME} $TESTCASE $LOG_OUTPUT < $FIFO |tee debug_input.txt|stdbuf -i0 -o0 -e0 "${@:3}"|tee debug_output.txt > $FIFO
-# stdbuf -i0 -o0 -e0 ${EXEC_NAME} $TESTCASE $LOG_OUTPUT < $FIFO |tee debug_input.txt|stdbuf -i0 -o0 -e0 "${@:3}"|tee debug_output.txt > $FIFO|tee debug_error.txt 2> $FIFO
