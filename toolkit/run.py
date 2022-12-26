@@ -1,6 +1,6 @@
 from subprocess import PIPE
 import subprocess
-from sys import argv,stderr
+from sys import argv
 
 def once():
     print("gen")
@@ -24,7 +24,7 @@ def run_108():
     subprocess.run("rm -rf out",shell=True)
     subprocess.run("mkdir out",shell=True)
     if len(argv) == 1:
-        print("Compiling code...",file=stderr)
+        print("Compiling code...")
         cc = "cmd.exe /c cargo build --release"
         subprocess.run(cc,shell=True)
     runc = "cmd.exe /c ..\\\\target\\\\release\\\\hokudai-hitachi.exe" if len(argv) == 1 else "../target/release/hokudai-hitachi"
@@ -33,14 +33,14 @@ def run_108():
         test = f"in/in{i:04d}.txt"
         proc = subprocess.run(f"./judge.sh {test} out/out{i:04d}.json {runc}",shell=True,stdout=PIPE,stderr=PIPE,encoding="utf-8")
         if proc.returncode != 0 and not proc.stderr.split()[-1].startswith("score"):
-            print(f"Testcase {i}({test}): ERROR",file=stderr)
-            print(proc.stderr,file=stderr)
+            print(f"Testcase {i}({test}): ERROR")
+            print(proc.stderr)
             exit(1)
         else:
             score = proc.stderr.split()[-1]
             score = int(score.replace("score:",""))
             spaces = " " * (4 - len(str(i)))
-            print(f"Testcase {i}({test}){spaces}score: {score:,}",file=stderr)
+            print(f"Testcase {i}({test}){spaces}score: {score:,}")
             print(f"Testcase {i}({test}){spaces}score: {score:,}",file=open("out/scores.txt","a"))
             cnt += score
     print("All testcases passed.")

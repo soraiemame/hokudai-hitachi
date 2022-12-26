@@ -291,7 +291,7 @@ impl Solver {
                     let d = dist(&cur_worker, j.v);
                     let arrive = turn as u32 + d;
                     let wait = j.reward[0].0.saturating_sub(arrive);
-                    (wait + d * 2, j.id)
+                    (wait + d * 5, j.id)
                 }).min();
                 if closest.is_none() {
                     turn_action.push(Action::Stay);
