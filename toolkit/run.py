@@ -1,6 +1,6 @@
 from subprocess import PIPE
 import subprocess
-from sys import argv
+from sys import argv,stderr
 
 def once():
     print("gen")
@@ -35,6 +35,8 @@ def run_108():
         proc = subprocess.run(f"./judge.sh {test} out/out{i:04d}.json {runc}",shell=True,stdout=PIPE,stderr=PIPE,encoding="utf-8")
         if proc.returncode != 0:
             print(f"Testcase {i}({test}): ERROR")
+            print(proc.stdout)
+            print(proc.stderr,file=stderr)
             error = True
             break
         else:
