@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.8'
       - name: change permission
-        run: chmod 777 ./toolkit/judge.sh && chmod 777 ./judge/judge
+        run: chmod 777 ./toolkit/judge.sh && chmod 777 ./toolkit/judge/judge
       - name: Compile code
         run: cargo build --release
       - name: run test
