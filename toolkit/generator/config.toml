@@ -18,20 +18,20 @@
 # "T_max*(9.0+x)":[T_max*9.0,T_max*10.0)の一様分布
 # "T_max*worker_num/2*x":[0,T_max*worker_num/2)の一様分布
 # ["T_max*(x**0.5)","T_max*(x**1.5)"]: T_maxに依存した分布2つ
-type = "A"
+type = "B"
 seed = 4008298671742788150
-#T_max = [300, 700, 1000]
+T_max = [300, 700, 1000]
 map_size = 2048
 map_node_ratio = "0.45*(0.5**where(map_max_depth>5,map_max_depth-5,0))"
-#map_max_depth = [5, 6, 7]
+map_max_depth = [5, 6, 7]
 unit_dist = 1
 map_vertex_num_hard_limit = [[150,2000]]
 map_edge_num_hard_limit_coeff = [[1.33333333333333, 2.0]]
-#worker_num = [1, 2, 5, 10]
+worker_num = [1, 2, 5, 10]
 worker_processable_num = "1+3*x"
 worker_processable_type = "3*x"
 worker_max_task_processing_num = "30+71*x"
-#job_num = [250, 500, 1000]
+job_num = [250, 500, 1000]
 job_type = "3*x"
 task_num = "500+1000*x"
 job_unfinished_penalty = ["0.98+0.02*x", "0.91+0.02*x"]

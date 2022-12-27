@@ -1,6 +1,8 @@
 /target
 /toolkit/out
 __pycache__
-debug_input.txt
-debug_output.txt
+debug_*.txt
 .vscode
+default.json
+testcase.txt
+config.toml
