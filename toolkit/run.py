@@ -6,7 +6,7 @@ def once():
     print("gen")
     subprocess.run("python3 gen.py",shell=True,stdout=PIPE,stderr=PIPE)
     print("run")
-    proc = subprocess.run("./judge.sh generator/testcase.txt visualizer/default.json cmd.exe /c cargo run --release",shell=True,stdout=PIPE,stderr=PIPE,encoding="utf-8")
+    proc = subprocess.run("./judge.sh generator/testcase.txt visualizer/default.json cmd.exe /c cargo run --release --bin a",shell=True,stdout=PIPE,stderr=PIPE,encoding="utf-8")
     if proc.returncode != 0:
         return False
     else:
@@ -20,14 +20,18 @@ def mul():
             break
 
 def run_108():
+    problem = argv[1].lower()
+    if not problem in "ab":
+        print(f"Invalid problem: {problem}")
+        exit(1)
     print("clear...")
     subprocess.run("rm -rf out",shell=True)
     subprocess.run("mkdir out",shell=True)
-    if len(argv) == 1:
+    if len(argv) == 2:
         print("Compiling code...")
-        cc = "cmd.exe /c cargo build --release"
+        cc = f"cmd.exe /c cargo build --release --bin {problem}"
         subprocess.run(cc,shell=True)
-    runc = "cmd.exe /c ..\\\\target\\\\release\\\\hokudai-hitachi.exe" if len(argv) == 1 else "../target/release/hokudai-hitachi"
+    runc = f"cmd.exe /c ..\\\\target\\\\release\\\\{problem}.exe" if len(argv) == 2 else f"../target/release/{problem}"
     cnt = 0
     for i in range(108):
         test = f"in/in{i:04d}.txt"
@@ -49,6 +53,9 @@ def run_108():
     print(f"50 testcase conversion: {int(cnt / 108 * 50):,}")
 
 def main():
+    if len(argv) == 1:
+        print("Please specify problem.")
+        exit(1)
     # once()
     run_108()
 
