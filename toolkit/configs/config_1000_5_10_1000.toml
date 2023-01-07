@@ -1,5 +1,5 @@
 type = "A"
-seed = 14945294434221273377
+seed = 5366615576423575087
 map_size = 2048
 map_node_ratio = "0.45*(0.5**where(map_max_depth>5,map_max_depth-5,0))"
 unit_dist = 1
@@ -53,6 +53,7 @@ T_max = [1000]
 map_max_depth = [5]
 worker_num = [10]
 job_num = [1000]
+
 
 
 
