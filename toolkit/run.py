@@ -56,8 +56,8 @@ def main():
     if len(argv) == 1:
         print("Please specify problem.")
         exit(1)
-    once()
-    # run_108()
+    # once()
+    run_108()
 
 if __name__ == '__main__':
     main()
