@@ -45,8 +45,11 @@ def gen_configs():
 
 def gen_all():
     for i,config in enumerate(glob("configs/*")):
+        if i != 3:
+            continue
         set_seed(randint(0,(1 << 64) - 1),config)
         subprocess.run(f"./generator/random_world.py -c {config} > in/in{i:04d}.txt",shell=True)
+        break
 
 
 def main():

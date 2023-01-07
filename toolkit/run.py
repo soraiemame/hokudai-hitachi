@@ -42,7 +42,7 @@ def run_108():
             exit(1)
         else:
             score = proc.stderr.split()[-1]
-            score = int(score.replace("score:",""))
+            score = int(float(score.replace("score:","")))
             spaces = " " * (4 - len(str(i)))
             print(f"Testcase {i}({test}){spaces}score: {score:,}")
             print(f"Testcase {i}({test}){spaces}score: {score:,}",file=open("out/scores.txt","a"))

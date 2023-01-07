@@ -7,18 +7,18 @@ fn main() {
     let mut stdin =
         proconio::source::line::LineSource::new(std::io::BufReader::new(std::io::stdin()));
     let input = Input::from_stdin(&mut stdin);
-    eprintln!("{:?}",get_time());
+    // eprintln!("{:?}",get_time());
     let solver = Solver::new();
     // let output = solver.solve(input);
     let output = solver.solve2(input);
-    eprintln!("{:?}",get_time());
+    // eprintln!("{:?}",get_time());
     print!("{}",output.to_string());
     input! {
         from &mut stdin,
         score: u64
     }
     println!("{}", score);
-    eprintln!("{:?}",get_time());
+    // eprintln!("{:?}",get_time());
 }
 
 #[derive(Debug)]
@@ -162,8 +162,8 @@ impl Job {
         raw_reward: Vec<(u32, u64)>,
         deps: Vec<usize>,
     ) -> Self {
-        let start = raw_reward[0].0 as usize;
-        let end = raw_reward[raw_reward.len() - 1].0 as usize;
+        let start = raw_reward[0].0 as usize - 1;
+        let end = raw_reward[raw_reward.len() - 1].0 as usize - 1;
         let mut reward = vec![];
         for i in 0..raw_reward.len() - 1 {
             for t in raw_reward[i].0..raw_reward[i + 1].0 {
@@ -172,8 +172,8 @@ impl Job {
                 }
                 let y_prev = raw_reward[i].1;
                 let y_next = raw_reward[i + 1].1;
-                let t_prev = raw_reward[i].0;
-                let t_next = raw_reward[i + 1].0;
+                let t_prev = raw_reward[i].0 - 1;
+                let t_next = raw_reward[i + 1].0 - 1;
                 reward.push(
                     (y_next - y_prev) * (t - t_prev) as u64 / (t_next - t_prev) as u64 + y_prev
                 );
