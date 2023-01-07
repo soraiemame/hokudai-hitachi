@@ -34,6 +34,143 @@ struct Input {
     workers: Vec<Worker>,
     n_job: usize,
     jobs: Vec<Job>,
+    t_weather: usize,
+    n_weather: usize,
+    prob_weather: Vec<Vec<f64>>,
+    w_constraint: Vec<u32>,
+    p_m: f64,
+    r_m: f64,
+    alpha: f64,
+    w_prob: Vec<(usize, Vec<f64>)>,
+}
+
+impl Input {
+    fn from_stdin(mut stdin: &mut LineSource<BufReader<Stdin>>) -> Self {
+        input! {
+            from &mut stdin,
+            t_max: usize,
+            v: usize,e: usize,
+            edges: [(Usize1,Usize1,u32);e],
+        }
+        let mut graph = vec![vec![]; v];
+        for (a, b, c) in edges {
+            graph[a].push((b, c));
+            graph[b].push((a, c));
+        }
+        input! {
+            from &mut stdin,
+            n_worker: usize
+        }
+        let mut workers = vec![];
+        workers.reserve(n_worker);
+        for _ in 0..n_worker {
+            input! {
+                from &mut stdin,
+                v: Usize1,
+                l_max: u32,
+                types: [Usize1]
+            }
+            workers.push(Worker::new(v, l_max, types));
+        }
+        input! {
+            from &mut stdin,
+            n_job: usize,
+        }
+        let mut jobs = vec![];
+        jobs.reserve(n_job);
+        for _ in 0..n_job {
+            input! {
+                from &mut stdin,
+                id: Usize1,
+                job_type: Usize1,
+                n_task: u32,
+                v: Usize1,
+                penalty: f64,
+                w_depend: f64,
+                mandatory: i32,
+                reward: [(u32,u64)],
+                deps: [Usize1],
+            }
+            jobs.push(Job::new(
+                id,
+                job_type,
+                n_task,
+                v,
+                penalty,
+                w_depend,
+                mandatory == 1,
+                reward,
+                deps,
+            ));
+        }
+        input! {
+            from &mut stdin,
+            t_weather: usize,
+            n_weather: usize,
+            prob_weather: [[f64;n_weather];n_weather],
+            w_constraint: [u32;n_weather],
+            p_m: f64,
+            r_m: f64,
+            alpha: f64,
+        }
+        let mut w_prob = vec![];
+        w_prob.reserve(t_max / t_weather);
+        for _ in 0..t_max / t_weather {
+            input! {
+                from &mut stdin,
+                t: usize,
+                prob: [f64;n_weather]
+            }
+            w_prob.push((t, prob));
+        }
+        Self {
+            t_max,
+            v,
+            e,
+            graph,
+            n_worker,
+            workers,
+            n_job,
+            jobs,
+            t_weather,
+            n_weather,
+            prob_weather,
+            w_constraint,
+            p_m,
+            r_m,
+            alpha,
+            w_prob,
+        }
+    }
+}
+
+// return weather
+fn do_turn_input(
+    input: &Input,
+    turn: usize,
+    mut stdin: &mut LineSource<BufReader<Stdin>>,
+) -> (usize, Option<Vec<(usize, Vec<f64>)>>) {
+    input! {
+        from &mut stdin,
+        w: usize,
+        _jobs_selected: [(usize,u32)],
+        _workers: [(usize,usize,usize,u32);input.n_worker]
+    }
+    if turn % input.t_weather == 0 {
+        let mut w_prob = vec![];
+        w_prob.reserve((input.t_max - turn) / input.t_weather);
+        for _ in 0..(input.t_max - turn) / input.t_weather {
+            input! {
+                from &mut stdin,
+                t: usize,
+                prob: [f64;input.n_weather]
+            }
+            w_prob.push((t, prob));
+        }
+        (w, Some(w_prob))
+    } else {
+        (w, None)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -90,6 +227,9 @@ struct Job {
     job_type: usize,
     n_task: u32,
     v: usize,
+    penalty: f64,
+    w_depend: f64,
+    mandatory: bool,
     reward: Vec<(u32, u64)>,
     deps: Vec<usize>,
 }
@@ -99,6 +239,9 @@ impl Job {
         job_type: usize,
         n_task: u32,
         v: usize,
+        penalty: f64,
+        w_depend: f64,
+        mandatory: bool,
         reward: Vec<(u32, u64)>,
         deps: Vec<usize>,
     ) -> Self {
@@ -109,6 +252,9 @@ impl Job {
             v,
             reward,
             deps,
+            penalty,
+            w_depend,
+            mandatory,
         }
     }
     fn can_finish(&self, start_turn: usize, l_max: u32) -> bool {
@@ -117,65 +263,6 @@ impl Job {
     }
     fn can_do(&self, turn: usize) -> bool {
         self.reward[0].0 < (turn as u32) && (turn as u32) < self.reward[self.reward.len() - 1].0
-    }
-}
-
-impl Input {
-    fn from_stdin(mut stdin: &mut LineSource<BufReader<Stdin>>) -> Self {
-        input! {
-            from &mut stdin,
-            t_max: usize,
-            v: usize,e: usize,
-            edges: [(Usize1,Usize1,u32);e],
-        }
-        let mut graph = vec![vec![]; v];
-        for (a, b, c) in edges {
-            graph[a].push((b, c));
-            graph[b].push((a, c));
-        }
-        input! {
-            from &mut stdin,
-            n_worker: usize
-        }
-        let mut workers = vec![];
-        workers.reserve(n_worker);
-        for _ in 0..n_worker {
-            input! {
-                from &mut stdin,
-                v: Usize1,
-                l_max: u32,
-                types: [Usize1]
-            }
-            workers.push(Worker::new(v, l_max, types));
-        }
-        input! {
-            from &mut stdin,
-            n_job: usize,
-        }
-        let mut jobs = vec![];
-        jobs.reserve(n_job);
-        for _ in 0..n_job {
-            input! {
-                from &mut stdin,
-                id: Usize1,
-                job_type: Usize1,
-                n_task: u32,
-                v: Usize1,
-                reward: [(u32,u64)],
-                deps: [Usize1],
-            }
-            jobs.push(Job::new(id, job_type, n_task, v, reward, deps));
-        }
-        Self {
-            t_max,
-            v,
-            e,
-            graph,
-            n_worker,
-            workers,
-            n_job,
-            jobs,
-        }
     }
 }
 
@@ -191,20 +278,25 @@ struct State {
     turn: usize,
     worker_pos: Vec<usize>,
     job_remain: Vec<u32>,
-    reward_got: Vec<u64>
+    reward_got: Vec<u64>,
 }
 
 impl State {
-    fn new(turn: usize,worker_pos: Vec<usize>,job_remain: Vec<u32>,reward_got: Vec<u64>) -> Self {
+    fn new(
+        turn: usize,
+        worker_pos: Vec<usize>,
+        job_remain: Vec<u32>,
+        reward_got: Vec<u64>,
+    ) -> Self {
         Self {
             turn,
             worker_pos,
             job_remain,
-            reward_got
+            reward_got,
         }
     }
     // 現時点で獲得した報酬の量、各ワーカーと各ジョブの位置関係を得点にする
-    fn score(&self,input: &Input) -> u64 {
+    fn score(&self, input: &Input) -> u64 {
         let mut res = 0;
         // cur score
         for i in 0..input.n_job {
@@ -214,9 +306,8 @@ impl State {
         }
         res
     }
-    fn next_states(&self,input: &Input) -> Vec<(Vec<Action>,State)> {
+    fn next_states(&self, input: &Input) -> Vec<(Vec<Action>, State)> {
         // let mut res = vec![];
-        
 
         vec![]
     }
@@ -287,12 +378,14 @@ impl Solver {
                 });
                 // let closest = jobs_cando.map(|j| (dist(&cur_worker, j.v), j.id)).min();
                 // let closest = jobs_cando.map(|j| (j.reward[0].0, j.id)).min();
-                let closest = jobs_cando.map(|j| {
-                    let d = dist(&cur_worker, j.v);
-                    let arrive = turn as u32 + d;
-                    let wait = j.reward[0].0.saturating_sub(arrive);
-                    (wait + d, j.id)
-                }).min();
+                let closest = jobs_cando
+                    .map(|j| {
+                        let d = dist(&cur_worker, j.v);
+                        let arrive = turn as u32 + d;
+                        let wait = j.reward[0].0.saturating_sub(arrive);
+                        (wait + d, j.id)
+                    })
+                    .min();
                 if closest.is_none() {
                     turn_action.push(Action::Stay);
                     continue;
@@ -338,7 +431,6 @@ impl Solver {
         res
     }
     fn solve_beam_search(self, mut input: Input) -> Vec<Vec<Action>> {
-        
         vec![]
     }
 }

@@ -18,7 +18,7 @@
 # "T_max*(9.0+x)":[T_max*9.0,T_max*10.0)の一様分布
 # "T_max*worker_num/2*x":[0,T_max*worker_num/2)の一様分布
 # ["T_max*(x**0.5)","T_max*(x**1.5)"]: T_maxに依存した分布2つ
-type = "B"
+type = "A"
 seed = 4008298671742788150
 T_max = [300, 700, 1000]
 map_size = 2048

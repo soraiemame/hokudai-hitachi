@@ -5,8 +5,14 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = [ "local" ]
+local = []
+
 [dependencies]
 proconio = { version = "=0.3.6", features = ["derive"] }
+rand = { version = "=0.7.3", features = ["small_rng"] }
+rand_pcg = "=0.2.1"
 
 [[bin]]
 name = "a"
