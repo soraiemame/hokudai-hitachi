@@ -125,9 +125,6 @@ impl Worker {
         if self.pos2 == !0 {
             self.pos2 = t;
         }
-        // assert_ne!(self.pos,!0);
-        // assert_ne!(self.pos2,!0);
-        // assert_ne!(t,!0);
         if dist_pp[self.pos][t] < dist_pp[self.pos2][t] {
             self.dist -= 1;
         } else {
@@ -155,6 +152,7 @@ struct Job {
     // reward: Vec<(u32, u64)>,
     reward: Vec<u64>,
     deps: Vec<usize>,
+    max_reward: u64,
 }
 impl Job {
     fn new(
@@ -168,12 +166,14 @@ impl Job {
         let start = raw_reward[0].0 as usize - 1;
         let end = raw_reward[raw_reward.len() - 1].0 as usize - 1;
         let mut reward = vec![];
+        let mut max_reward = 0;
         for i in 0..raw_reward.len() - 1 {
             for t in raw_reward[i].0..raw_reward[i + 1].0 {
                 let y_prev = raw_reward[i].1 as i64;
                 let y_next = raw_reward[i + 1].1 as i64;
                 let t_prev = raw_reward[i].0;
                 let t_next = raw_reward[i + 1].0;
+                chmax!(max_reward, y_prev as u64);
                 reward.push(
                     ((y_next - y_prev) * (t - t_prev) as i64 / (t_next - t_prev) as i64 + y_prev)
                         as u64,
@@ -189,6 +189,7 @@ impl Job {
             end,
             reward,
             deps,
+            max_reward,
         }
     }
     fn get_reward(&self, t: usize) -> u64 {
@@ -261,9 +262,6 @@ impl State {
                 if self.worker_pos[idx].1 == !0 {
                     self.worker_pos[idx].1 = p;
                 }
-                // assert_ne!(self.pos,!0);
-                // assert_ne!(self.pos2,!0);
-                // assert_ne!(t,!0);
                 if dist_pp[self.worker_pos[idx].0][p] < dist_pp[self.worker_pos[idx].1][p] {
                     self.worker_pos[idx].2 -= 1;
                 } else {
@@ -332,8 +330,8 @@ impl State {
                             .all(|&j2| self.job_done[input.jobs[j2].id])
                         && self.can_finish(input, self.turn as usize, j, k)
                     {
-                        assert_ne!(input.workers[j].l_max.min(self.job_remain[k]), 0);
-                        assert!(input.jobs[k].can_do(self.turn));
+                        // assert_ne!(input.workers[j].l_max.min(self.job_remain[k]), 0);
+                        // assert!(input.jobs[k].can_do(self.turn));
                         jid = k;
                         let act =
                             Action::Execute(k, input.workers[j].l_max.min(self.job_remain[k]));
@@ -441,7 +439,6 @@ impl Solver {
             let mut ns = State::from_input(&input);
             let rl = (t / 5.0 * (input.t_max - 30) as f64) as usize + 10;
             let start = rng.gen_range(rl, rl + 10);
-            // eprintln!("change from: {}",start);
             for i in 0..start {
                 ns.apply(&input, &self.dist_pp, &res[i]);
                 ns.tick();
@@ -474,7 +471,7 @@ impl Solver {
     ) -> Option<usize> {
         let mut res = None;
         let mut score = 1 << 30;
-        let take_job = |p: usize| -> Vec<(usize,u32)> {
+        let take_job = |p: usize| -> Vec<(usize, u32)> {
             let mut res = vec![];
             for &jid in &self.pos_work[p] {
                 let d = self.dist(cs.worker_pos[wid], input.jobs[jid].v);
@@ -488,7 +485,7 @@ impl Solver {
                     && cs.can_finish(input, cs.turn + d as usize + 1, wid, jid)
                     && task_do.iter().all(|&jid2| jid2 != jid)
                 {
-                    res.push((jid,d));
+                    res.push((jid, d));
                 }
             }
             res
@@ -497,18 +494,19 @@ impl Solver {
         let p1 = cs.worker_pos[wid].1;
         for i in 0..input.v {
             let v = self.ord[p0][i];
-            if res.is_some() && self.dist(cs.worker_pos[wid],v) >= score {
+            if res.is_some() && self.dist(cs.worker_pos[wid], v) >= score {
                 break;
             }
-            for (jid,d) in take_job(v) {
+            for (jid, d) in take_job(v) {
                 let arrive = cs.turn + d as usize;
                 let wait = input.jobs[jid].start.saturating_sub(arrive);
-                let nx = self.dist(cs.worker_pos[wid], v) + wait as u32;
+                let r = input.jobs[jid].get_reward(cs.turn);
+                let nx = ((self.dist(cs.worker_pos[wid], v) + wait as u32) as f64
+                    * (2.0 - r as f64 / input.jobs[jid].max_reward as f64)) as u32;
                 if res.is_none() {
                     res = Some(jid);
                     score = nx;
-                }
-                else if chmin!(score,nx) {
+                } else if chmin!(score, nx) {
                     res = Some(jid);
                 }
             }
@@ -518,18 +516,19 @@ impl Solver {
         }
         for i in 0..input.v {
             let v = self.ord[p1][i];
-            if res.is_some() && self.dist(cs.worker_pos[wid],v) >= score {
+            if res.is_some() && self.dist(cs.worker_pos[wid], v) >= score {
                 break;
             }
-            for (jid,d) in take_job(v) {
+            for (jid, d) in take_job(v) {
                 let arrive = cs.turn + d as usize;
                 let wait = input.jobs[jid].start.saturating_sub(arrive);
-                let nx = self.dist(cs.worker_pos[wid], v) + wait as u32;
+                let r = input.jobs[jid].get_reward(cs.turn);
+                let nx = ((self.dist(cs.worker_pos[wid], v) + wait as u32) as f64
+                * (2.0 - r as f64 / input.jobs[jid].max_reward as f64)) as u32;
                 if res.is_none() {
                     res = Some(jid);
                     score = nx;
-                }
-                else if chmin!(score,nx) {
+                } else if chmin!(score, nx) {
                     res = Some(jid);
                 }
             }
@@ -546,34 +545,7 @@ impl Solver {
             turn_action.reserve(input.t_max);
             for i in 0..input.n_worker {
                 if task_do[i] == !0 || cs.job_remain[task_do[i]] == 0 {
-                    // let jobs_cando = (0..input.n_job)
-                    //     .map(|jid| (jid, self.dist(cs.worker_pos[i], input.jobs[jid].v)))
-                    //     .filter(|&(jid, d)| {
-                    //         !cs.job_done[jid]
-                    //             && cs.job_remain[jid] != 0
-                    //             && input.workers[i].can_do(&input.jobs[jid])
-                    //             && input.jobs[jid]
-                    //                 .deps
-                    //                 .iter()
-                    //                 .all(|&j2| cs.job_done[input.jobs[j2].id])
-                    //             && cs.can_finish(input, turn + d as usize + 1, i, jid)
-                    //             && task_do.iter().all(|&jid2| jid2 != jid)
-                    //     });
-                    // let closest = jobs_cando.min_by_key(|&(jid, d)| {
-                    //     let arrive = turn + d as usize;
-                    //     let wait = input.jobs[jid].start.saturating_sub(arrive);
-                    //     wait + d as usize
-                    // });
-                    // let closest = if let Some((a,b)) = closest {Some(a)} else {None};
                     let closest = self.get_jobs_around(input, cs, &task_do, i);
-                    // if closest != closest2 {
-                    //     eprintln!("now: {}",turn);
-                    //     eprintln!("ok: {:?}, ng: {:?}",closest,closest2);
-                    //     eprintln!("job1 starts: {}, dist: {}",input.jobs[closest.unwrap()].start,self.dist(cs.worker_pos[i], input.jobs[closest.unwrap()].v));
-                    //     eprintln!("job2 starts: {}, dist: {}",input.jobs[closest2.unwrap()].start,self.dist(cs.worker_pos[i], input.jobs[closest2.unwrap()].v));
-                    //     self.get_jobs_around(input, cs, &task_do, i);
-                    //     unreachable!()
-                    // }
                     if closest.is_none() {
                         turn_action.push(Action::Stay);
                         continue;
@@ -588,8 +560,8 @@ impl Solver {
                         continue;
                     }
                     let task_amount = cs.job_remain[task_do[i]].min(input.workers[i].l_max);
-                    assert_ne!(task_amount, 0);
-                    assert!(input.jobs[task_do[i]].can_do(turn));
+                    // assert_ne!(task_amount, 0);
+                    // assert!(input.jobs[task_do[i]].can_do(turn));
                     turn_action.push(Action::Execute(task_do[i], task_amount));
                     cs.apply_action(
                         &input,
