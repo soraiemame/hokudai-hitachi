@@ -319,6 +319,7 @@ impl State {
                     continue;
                 }
                 let mut acts = vec![];
+                let mut jid = !0;
                 for &k in &pos_work[self.worker_pos[j].0] {
                     // ここ見直す
                     if input.jobs[k].can_do(self.turn)
@@ -332,29 +333,23 @@ impl State {
                         && self.can_finish(input, self.turn as usize + 1, j, k)
                     {
                         assert_ne!(input.workers[j].l_max.min(self.job_remain[k]), 0);
-                        acts.push(Action::Execute(
-                            k,
-                            input.workers[j].l_max.min(self.job_remain[k]),
-                        ));
-                        acts.push(Action::Execute(
-                            k,
-                            input.workers[j].l_max.min(self.job_remain[k]),
-                        ));
-                        acts.push(Action::Execute(
-                            k,
-                            input.workers[j].l_max.min(self.job_remain[k]),
-                        ));
-                        acts.push(Action::Execute(
-                            k,
-                            input.workers[j].l_max.min(self.job_remain[k]),
-                        ));
+                        jid = k;
+                        let act = Action::Execute(k,input.workers[j].l_max.min(self.job_remain[k]));
+                        acts.push(act);
+                        acts.push(act);
+                        acts.push(act);
+                        acts.push(act);
                     }
                 }
-                for &(k, _) in &input.graph[self.worker_pos[j].0] {
-                    acts.push(Action::Move(k));
-                    acts.push(Action::Move(k));
+                if jid == !0 || self.can_finish(input, self.turn as usize + 2, j, jid) {
+                    acts.push(Action::Stay);
+                    if jid == !0 || self.can_finish(input, self.turn as usize + 3, j, jid) {
+                        for &(k, _) in &input.graph[self.worker_pos[j].0] {
+                            acts.push(Action::Move(k));
+                            acts.push(Action::Move(k));
+                        }
+                    }
                 }
-                acts.push(Action::Stay);
                 let act = acts[rng.gen_range(0, acts.len())];
                 turn_action.push(act);
                 self.apply_action(input, dist_pp, j, act);
@@ -426,7 +421,6 @@ impl Solver {
         let mut res = self.run(&input, &mut cs);
         let mut rng = rand_pcg::Pcg64Mcg::new(0xfedcba9876543210fedcba9876543210);
         let mut loop_cnt = 0;
-        eprintln!("{}", res.len());
         loop {
             let t = get_time();
             if t >= 4.9 {
@@ -460,6 +454,11 @@ impl Solver {
         let res = self.improve_actions(&input, res);
         Output::new(res)
     }
+    fn get_jobs_around(&self,idx: usize,d: usize) -> Vec<usize> {
+        // let mut que = VecDeque::new();
+        // let mut visit = HashMap::new;
+        todo!()
+    }
     fn run(&self, input: &Input, cs: &mut State) -> Vec<Vec<Action>> {
         let mut res = vec![];
         res.reserve(input.t_max);
@@ -483,6 +482,7 @@ impl Solver {
                                 && cs.can_finish(input, turn + d as usize + 1, i, jid)
                                 && task_do.iter().all(|&jid2| jid2 != jid)
                         });
+                    // let jobs_cando = self.get_jobs_around(i, 20).iter();
                     let closest = jobs_cando.min_by_key(|&(jid, d)| {
                         let arrive = turn + d as usize;
                         let wait = input.jobs[jid].start.saturating_sub(arrive);
