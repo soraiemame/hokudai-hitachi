@@ -6,5 +6,5 @@ debug_*.txt
 default.json
 testcase.txt
 config.toml
-test.py
+test*.py
 in.txt

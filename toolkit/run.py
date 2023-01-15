@@ -1,6 +1,7 @@
 from subprocess import PIPE
 import subprocess
 from sys import argv
+import time
 
 def once():
     print("gen")
@@ -34,23 +35,29 @@ def run_108():
     runc = f"cmd.exe /c ..\\\\target\\\\release\\\\{problem}.exe" if len(argv) == 2 else f"../target/release/{problem}"
     cnt = 0
     for i in range(108):
-        test = f"in/in{i:04d}.txt"
-        proc = subprocess.run(f"./judge.sh {test} out/out{i:04d}.json {runc}",shell=True,stdout=PIPE,stderr=PIPE,encoding="utf-8")
-        if proc.returncode != 0 and not proc.stderr.split()[-1].startswith("score"):
-            print(f"Testcase {i}({test}): ERROR")
-            print(proc.stderr)
+        try:
+            test = f"in/in{i:04d}.txt"
+            proc = subprocess.run(f"./judge.sh {test} out/out{i:04d}.json {runc}",shell=True,stdout=PIPE,stderr=PIPE,encoding="utf-8")
+            if proc.returncode != 0 and not proc.stderr.split()[-1].startswith("score"):
+                print(f"Testcase {i}({test}): ERROR")
+                print(proc.stderr)
+                exit(1)
+            else:
+                score = proc.stderr.split()[-1]
+                score = int(float(score.replace("score:","")))
+                spaces = " " * (4 - len(str(i)))
+                print(f"Testcase {i}({test}){spaces}score: {score:,}")
+                print(f"Testcase {i}({test}){spaces}score: {score:,}",file=open("out/scores.txt","a"))
+                cnt += score
+        except KeyboardInterrupt:
+            time.sleep(5)
             exit(1)
-        else:
-            score = proc.stderr.split()[-1]
-            score = int(float(score.replace("score:","")))
-            spaces = " " * (4 - len(str(i)))
-            print(f"Testcase {i}({test}){spaces}score: {score:,}")
-            print(f"Testcase {i}({test}){spaces}score: {score:,}",file=open("out/scores.txt","a"))
-            cnt += score
     print("All testcases passed.")
     print(f"score sum: {cnt:,}")
     print(f"testcase average: {int(cnt / 108):,}")
     print(f"50 testcase conversion: {int(cnt / 108 * 50):,}")
+
+
 
 def main():
     if len(argv) == 1:

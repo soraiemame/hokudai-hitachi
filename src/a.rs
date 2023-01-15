@@ -10,6 +10,7 @@ fn main() {
         proconio::source::line::LineSource::new(std::io::BufReader::new(std::io::stdin()));
     let input = Input::from_stdin(&mut stdin);
     // eprintln!("{:?}",get_time());
+    eprintln!("{:?}",input.jobs[0]);
     let solver = Solver::new(&input);
     let output = solver.solve(input);
     // eprintln!("{:?}",get_time());
@@ -163,20 +164,17 @@ impl Job {
         raw_reward: Vec<(u32, u64)>,
         deps: Vec<usize>,
     ) -> Self {
-        let start = raw_reward[0].0 as usize - 1;
-        let end = raw_reward[raw_reward.len() - 1].0 as usize - 1;
+        let start = raw_reward[0].0 as usize;
+        let end = raw_reward[raw_reward.len() - 1].0 as usize;
         let mut reward = vec![];
         for i in 0..raw_reward.len() - 1 {
             for t in raw_reward[i].0..raw_reward[i + 1].0 {
-                if t == 0 {
-                    continue;
-                }
-                let y_prev = raw_reward[i].1;
-                let y_next = raw_reward[i + 1].1;
-                let t_prev = raw_reward[i].0 - 1;
-                let t_next = raw_reward[i + 1].0 - 1;
+                let y_prev = raw_reward[i].1 as i64;
+                let y_next = raw_reward[i + 1].1 as i64;
+                let t_prev = raw_reward[i].0;
+                let t_next = raw_reward[i + 1].0;
                 reward.push(
-                    (y_next - y_prev) * (t - t_prev) as u64 / (t_next - t_prev) as u64 + y_prev,
+                    ((y_next - y_prev) * (t - t_prev) as i64 / (t_next - t_prev) as i64 + y_prev) as u64
                 );
             }
         }
@@ -195,11 +193,11 @@ impl Job {
         if t <= self.start || self.end <= t {
             0
         } else {
-            self.reward[t - self.start - 1]
+            self.reward[t - self.start]
         }
     }
     fn can_finish(&self, start_turn: usize, l_max: u32) -> bool {
-        let end_turn = start_turn + ((self.n_task + l_max - 1) / l_max as u32) as usize;
+        let end_turn = start_turn + ((self.n_task + l_max - 1) / l_max as u32) as usize - 1;
         end_turn < self.end
     }
     fn can_do(&self, turn: usize) -> bool {
@@ -495,7 +493,7 @@ impl Solver {
                         && cs.job_remain[jid] != 0
                         && input.workers[i].can_do(&input.jobs[jid])
                         && input.jobs[jid].deps.iter().all(|&j2| task_done[input.jobs[j2].id])
-                        && input.jobs[jid].can_finish(turn + d as usize, input.workers[i].l_max)
+                        && input.jobs[jid].can_finish(turn + d as usize + 1, input.workers[i].l_max)
                         && task_do.iter().all(|&jid2| jid2 != jid)
                     });
                     let closest = jobs_cando.min_by_key(|&(jid,d)| {
@@ -544,7 +542,51 @@ impl Solver {
             }
             cs.tick();
         }
+        let res = self.improve_actions(&input, res);
         Output::new(res)
+    }
+    // 仕事の順序を変える
+    fn improve_actions(&self,input: &Input,actions: Vec<Vec<Action>>) -> Vec<Vec<Action>> {
+        let mut res = actions.clone();
+        let mut did = vec![vec![];input.n_job];
+        for i in 0..input.t_max {
+            for j in 0..input.n_worker {
+                if let Action::Execute(idx, _a) = actions[i][j] {
+                    did[idx].push((i,j));
+                }
+            }
+        }
+        for i in 0..input.n_job {
+            if did.is_empty() {
+                continue;
+            }
+            // 最後に仕事量をいくら余らせたか
+            let mut rem = {
+                let mut rem = (!0,!0,0);
+                for &(t,w) in &did[i] {
+                    if let Action::Execute(_, a) = actions[t][w] {
+                        if input.workers[w].l_max != a {
+                            rem = (t,w,input.workers[w].l_max - a);
+                        }
+                    }
+                }
+                rem
+            };
+            if rem.2 == 0 {
+                continue;
+            }
+            let least = did[i].iter().min_by_key(|(t,_w)| {
+                input.jobs[i].get_reward(*t);
+            }).unwrap();
+            if let Action::Execute(_,a1) = res[least.0][least.1] {
+                if let Action::Execute(_,a2) = res[rem.0][rem.1] {
+                    rem.2 = rem.2.min(a1);
+                    res[least.0][least.1] = Action::Execute(i, a1 - rem.2);
+                    res[rem.0][rem.1] = Action::Execute(i, a2 + rem.2);
+                }
+            }
+        }
+        res
     }
 }
 
