@@ -335,7 +335,8 @@ impl State {
                         assert_ne!(input.workers[j].l_max.min(self.job_remain[k]), 0);
                         assert!(input.jobs[k].can_do(self.turn));
                         jid = k;
-                        let act = Action::Execute(k,input.workers[j].l_max.min(self.job_remain[k]));
+                        let act =
+                            Action::Execute(k, input.workers[j].l_max.min(self.job_remain[k]));
                         acts.push(act);
                         acts.push(act);
                         acts.push(act);
@@ -364,6 +365,7 @@ impl State {
 
 struct Solver {
     dist_pp: Vec<Vec<u32>>,
+    ord: Vec<Vec<usize>>,
     par_pp: Vec<Vec<usize>>,
     pos_work: Vec<Vec<usize>>,
 }
@@ -371,12 +373,20 @@ struct Solver {
 impl Solver {
     fn new(input: &Input) -> Self {
         let (dist_pp, par_pp) = Solver::dijkstra(input);
+        let mut ord = vec![];
+        ord.reserve(input.v);
+        for i in 0..input.v {
+            let mut v = (0..input.v).collect::<Vec<_>>();
+            v.sort_by_key(|&x| dist_pp[i][x]);
+            ord.push(v);
+        }
         let mut pos_work = vec![vec![]; input.v];
         for i in 0..input.n_job {
             pos_work[input.jobs[i].v].push(i);
         }
         Self {
             dist_pp,
+            ord,
             par_pp,
             pos_work,
         }
@@ -455,46 +465,72 @@ impl Solver {
         let res = self.improve_actions(&input, res);
         Output::new(res)
     }
-    fn get_jobs_around(&self,input: &Input,cs: &State,dist_pp: &Vec<Vec<u32>>,wid: usize,r: usize) -> Vec<usize> {
-        let mut que = BinaryHeap::new();
-        let mut visit = HashMap::new();
+    fn get_jobs_around(
+        &self,
+        input: &Input,
+        cs: &State,
+        task_do: &Vec<usize>,
+        wid: usize,
+    ) -> Option<usize> {
+        let mut res = None;
+        let mut score = 1 << 30;
+        let take_job = |p: usize| -> Vec<(usize,u32)> {
+            let mut res = vec![];
+            for &jid in &self.pos_work[p] {
+                let d = self.dist(cs.worker_pos[wid], input.jobs[jid].v);
+                if !cs.job_done[jid]
+                    && cs.job_remain[jid] != 0
+                    && input.workers[wid].can_do(&input.jobs[jid])
+                    && input.jobs[jid]
+                        .deps
+                        .iter()
+                        .all(|&j2| cs.job_done[input.jobs[j2].id])
+                    && cs.can_finish(input, cs.turn + d as usize + 1, wid, jid)
+                    && task_do.iter().all(|&jid2| jid2 != jid)
+                {
+                    res.push((jid,d));
+                }
+            }
+            res
+        };
         let p0 = cs.worker_pos[wid].0;
         let p1 = cs.worker_pos[wid].1;
-        que.push((cs.worker_pos[wid].2,p0));
-        que.push((dist_pp[p0][p1] - cs.worker_pos[wid].2,p1));
-        visit.insert(cs.worker_pos[wid].0,cs.worker_pos[wid].2);
-        let mut res = vec![];
-        let take_job = |p: usize| {
-            for &jid in &self.pos_work[p] {
-                // if
-                //     !cs.job_done[jid]
-                //     && cs.job_remain[jid] != 0
-                //     && input.workers[i].can_do(&input.jobs[jid])
-                //     && input.jobs[jid]
-                //         .deps
-                //         .iter()
-                //         .all(|&j2| cs.job_done[input.jobs[j2].id])
-                //     && cs.can_finish(input, cs.turn + d as usize + 1, wid, jid)
-                //     && task_do.iter().all(|&jid2| jid2 != jid) {
-
-                //     }
-                    
-            }
-        };
-        for &wid in &self.pos_work[p0] {
-
-        }
-        while let Some((d,p)) = que.pop() {
-            if visit[&p] < d {
-                continue;
-            }
-            if d >= r as u32 && !res.is_empty() {
+        for i in 0..input.v {
+            let v = self.ord[p0][i];
+            if res.is_some() && self.dist(cs.worker_pos[wid],v) >= score {
                 break;
             }
-            for &(to,cost) in &input.graph[p] {
-                if !visit.contains_key(&to) || visit[&to] > d + cost {
-                    visit.insert(to, d + cost);
-                    que.push((visit[&to],to));
+            for (jid,d) in take_job(v) {
+                let arrive = cs.turn + d as usize;
+                let wait = input.jobs[jid].start.saturating_sub(arrive);
+                let nx = self.dist(cs.worker_pos[wid], v) + wait as u32;
+                if res.is_none() {
+                    res = Some(jid);
+                    score = nx;
+                }
+                else if chmin!(score,nx) {
+                    res = Some(jid);
+                }
+            }
+        }
+        if p1 == !0 {
+            return res;
+        }
+        for i in 0..input.v {
+            let v = self.ord[p1][i];
+            if res.is_some() && self.dist(cs.worker_pos[wid],v) >= score {
+                break;
+            }
+            for (jid,d) in take_job(v) {
+                let arrive = cs.turn + d as usize;
+                let wait = input.jobs[jid].start.saturating_sub(arrive);
+                let nx = self.dist(cs.worker_pos[wid], v) + wait as u32;
+                if res.is_none() {
+                    res = Some(jid);
+                    score = nx;
+                }
+                else if chmin!(score,nx) {
+                    res = Some(jid);
                 }
             }
         }
@@ -510,30 +546,39 @@ impl Solver {
             turn_action.reserve(input.t_max);
             for i in 0..input.n_worker {
                 if task_do[i] == !0 || cs.job_remain[task_do[i]] == 0 {
-                    let jobs_cando = (0..input.n_job)
-                        .map(|jid| (jid, self.dist(cs.worker_pos[i], input.jobs[jid].v)))
-                        .filter(|&(jid, d)| {
-                            !cs.job_done[jid]
-                                && cs.job_remain[jid] != 0
-                                && input.workers[i].can_do(&input.jobs[jid])
-                                && input.jobs[jid]
-                                    .deps
-                                    .iter()
-                                    .all(|&j2| cs.job_done[input.jobs[j2].id])
-                                && cs.can_finish(input, turn + d as usize + 1, i, jid)
-                                && task_do.iter().all(|&jid2| jid2 != jid)
-                        });
-                    // let jobs_cando = self.get_jobs_around(i, 20).iter();
-                    let closest = jobs_cando.min_by_key(|&(jid, d)| {
-                        let arrive = turn + d as usize;
-                        let wait = input.jobs[jid].start.saturating_sub(arrive);
-                        wait + d as usize
-                    });
+                    // let jobs_cando = (0..input.n_job)
+                    //     .map(|jid| (jid, self.dist(cs.worker_pos[i], input.jobs[jid].v)))
+                    //     .filter(|&(jid, d)| {
+                    //         !cs.job_done[jid]
+                    //             && cs.job_remain[jid] != 0
+                    //             && input.workers[i].can_do(&input.jobs[jid])
+                    //             && input.jobs[jid]
+                    //                 .deps
+                    //                 .iter()
+                    //                 .all(|&j2| cs.job_done[input.jobs[j2].id])
+                    //             && cs.can_finish(input, turn + d as usize + 1, i, jid)
+                    //             && task_do.iter().all(|&jid2| jid2 != jid)
+                    //     });
+                    // let closest = jobs_cando.min_by_key(|&(jid, d)| {
+                    //     let arrive = turn + d as usize;
+                    //     let wait = input.jobs[jid].start.saturating_sub(arrive);
+                    //     wait + d as usize
+                    // });
+                    // let closest = if let Some((a,b)) = closest {Some(a)} else {None};
+                    let closest = self.get_jobs_around(input, cs, &task_do, i);
+                    // if closest != closest2 {
+                    //     eprintln!("now: {}",turn);
+                    //     eprintln!("ok: {:?}, ng: {:?}",closest,closest2);
+                    //     eprintln!("job1 starts: {}, dist: {}",input.jobs[closest.unwrap()].start,self.dist(cs.worker_pos[i], input.jobs[closest.unwrap()].v));
+                    //     eprintln!("job2 starts: {}, dist: {}",input.jobs[closest2.unwrap()].start,self.dist(cs.worker_pos[i], input.jobs[closest2.unwrap()].v));
+                    //     self.get_jobs_around(input, cs, &task_do, i);
+                    //     unreachable!()
+                    // }
                     if closest.is_none() {
                         turn_action.push(Action::Stay);
                         continue;
                     }
-                    let closest = closest.unwrap().0;
+                    let closest = closest.unwrap();
                     task_do[i] = closest;
                 }
                 // do_work
