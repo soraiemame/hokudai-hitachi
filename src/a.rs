@@ -524,7 +524,7 @@ impl Solver {
                 let wait = input.jobs[jid].start.saturating_sub(arrive);
                 let r = input.jobs[jid].get_reward(cs.turn);
                 let nx = ((self.dist(cs.worker_pos[wid], v) + wait as u32) as f64
-                * (2.0 - r as f64 / input.jobs[jid].max_reward as f64)) as u32;
+                * (2.0 - r as f64 / input.jobs[jid].max_reward as f64) * (2.0 - r as f64 / 1e7)) as u32;
                 if res.is_none() {
                     res = Some(jid);
                     score = nx;
