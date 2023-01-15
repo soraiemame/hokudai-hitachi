@@ -165,15 +165,15 @@ impl Job {
         raw_reward: Vec<(u32, u64)>,
         deps: Vec<usize>,
     ) -> Self {
-        let start = raw_reward[0].0 as usize;
-        let end = raw_reward[raw_reward.len() - 1].0 as usize;
+        let start = raw_reward[0].0 as usize - 1;
+        let end = raw_reward[raw_reward.len() - 1].0 as usize - 1;
         let mut reward = vec![];
         for i in 0..raw_reward.len() - 1 {
             for t in raw_reward[i].0..raw_reward[i + 1].0 {
                 let y_prev = raw_reward[i].1 as i64;
                 let y_next = raw_reward[i + 1].1 as i64;
-                let t_prev = raw_reward[i].0 - 1;
-                let t_next = raw_reward[i + 1].0 - 1;
+                let t_prev = raw_reward[i].0;
+                let t_next = raw_reward[i + 1].0;
                 reward.push(
                     ((y_next - y_prev) * (t - t_prev) as i64 / (t_next - t_prev) as i64 + y_prev)
                         as u64,
@@ -455,13 +455,50 @@ impl Solver {
         let res = self.improve_actions(&input, res);
         Output::new(res)
     }
-    fn get_jobs_around(&self,input: &Input,cs: &State,dist_pp: &Vec<Vec<u32>>,w_idx: usize,d: usize) -> Vec<usize> {
+    fn get_jobs_around(&self,input: &Input,cs: &State,dist_pp: &Vec<Vec<u32>>,wid: usize,r: usize) -> Vec<usize> {
         let mut que = BinaryHeap::new();
         let mut visit = HashMap::new();
-        que.push((cs.worker_pos[w_idx].2,cs.worker_pos[w_idx].0));
-        que.push((cs.worker_pos[w_idx].2,cs.worker_pos[w_idx].0));
-        visit.insert(cs.worker_pos[w_idx].0,cs.worker_pos[w_idx].2);
-        todo!()
+        let p0 = cs.worker_pos[wid].0;
+        let p1 = cs.worker_pos[wid].1;
+        que.push((cs.worker_pos[wid].2,p0));
+        que.push((dist_pp[p0][p1] - cs.worker_pos[wid].2,p1));
+        visit.insert(cs.worker_pos[wid].0,cs.worker_pos[wid].2);
+        let mut res = vec![];
+        let take_job = |p: usize| {
+            for &jid in &self.pos_work[p] {
+                // if
+                //     !cs.job_done[jid]
+                //     && cs.job_remain[jid] != 0
+                //     && input.workers[i].can_do(&input.jobs[jid])
+                //     && input.jobs[jid]
+                //         .deps
+                //         .iter()
+                //         .all(|&j2| cs.job_done[input.jobs[j2].id])
+                //     && cs.can_finish(input, cs.turn + d as usize + 1, wid, jid)
+                //     && task_do.iter().all(|&jid2| jid2 != jid) {
+
+                //     }
+                    
+            }
+        };
+        for &wid in &self.pos_work[p0] {
+
+        }
+        while let Some((d,p)) = que.pop() {
+            if visit[&p] < d {
+                continue;
+            }
+            if d >= r as u32 && !res.is_empty() {
+                break;
+            }
+            for &(to,cost) in &input.graph[p] {
+                if !visit.contains_key(&to) || visit[&to] > d + cost {
+                    visit.insert(to, d + cost);
+                    que.push((visit[&to],to));
+                }
+            }
+        }
+        res
     }
     fn run(&self, input: &Input, cs: &mut State) -> Vec<Vec<Action>> {
         let mut res = vec![];
