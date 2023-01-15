@@ -2,7 +2,6 @@ use proconio::{input, marker::Usize1, source::line::LineSource};
 use rand::prelude::*;
 use std::collections::HashMap;
 use std::io::{BufReader, Stdin};
-use std::mem::size_of;
 use std::{cmp::Reverse, collections::BinaryHeap, collections::VecDeque};
 
 fn main() {
@@ -12,9 +11,7 @@ fn main() {
     let input = Input::from_stdin(&mut stdin);
     // eprintln!("{:?}",get_time());
     let solver = Solver::new(&input);
-    // let output = solver.solve(input);
-    // let output = solver.solve2(input);
-    let output = solver.solve3(input);
+    let output = solver.solve(input);
     // eprintln!("{:?}",get_time());
     print!("{}", output.to_string());
     input! {
@@ -466,16 +463,17 @@ impl Solver {
         }
         (res, par)
     }
-    fn solve(self, mut input: Input) -> Output {
+    fn solve(self, input: Input) -> Output {
         eprintln!("{:?}", get_time());
-        let dist = |w: &Worker, t: usize| -> u32 {
-            if w.pos2 == !0 {
-                self.dist_pp[w.pos][t]
+        let mut cs = State::from_input(&input);
+        let dist = |p: (usize,usize,u32), to: usize| -> u32 {
+            if p.1 == !0 {
+                self.dist_pp[p.0][to]
             } else {
-                if self.dist_pp[w.pos][t] < self.dist_pp[w.pos2][t] {
-                    self.dist_pp[w.pos][t] + w.dist
+                if self.dist_pp[p.0][to] < self.dist_pp[p.1][to] {
+                    self.dist_pp[p.0][to] + p.2
                 } else {
-                    self.dist_pp[w.pos][t] - (self.dist_pp[w.pos][w.pos2] - w.dist)
+                    self.dist_pp[p.0][to] - (self.dist_pp[p.0][p.1] - p.2)
                 }
             }
         };
@@ -483,59 +481,60 @@ impl Solver {
         res.reserve(input.t_max);
 
         let mut task_done = vec![false; input.n_job];
+        let mut task_do = vec![!0; input.n_worker];
         for turn in 0..input.t_max {
             let mut turn_action = vec![];
             turn_action.reserve(input.t_max);
             let mut add_done = vec![];
             for i in 0..input.n_worker {
-                let cur_worker = &input.workers[i];
-                let jobs_cando = input.jobs.iter().filter(|j| {
-                    let d = dist(&cur_worker, j.v);
-                    !task_done[j.id]
-                        && j.n_task != 0
-                        && cur_worker.can_do(j)
-                        && j.deps.iter().all(|&j2| task_done[input.jobs[j2].id])
-                        && j.can_finish(turn + d as usize, cur_worker.l_max)
-                });
-                // let closest = jobs_cando.map(|j| (dist(&cur_worker, j.v), j.id)).min();
-                // let closest = jobs_cando.map(|j| (j.reward[0].0, j.id)).min();
-                let closest = jobs_cando
-                    .map(|j| {
-                        let d = dist(&cur_worker, j.v);
+                if task_do[i] == !0 || cs.job_remain[task_do[i]] == 0 {
+                    let jobs_cando = (0..input.n_job)
+                        .map(|jid| (jid,dist(cs.worker_pos[i],input.jobs[jid].v)))
+                        .filter(|&(jid,d)| {
+                        !task_done[jid]
+                        && cs.job_remain[jid] != 0
+                        && input.workers[i].can_do(&input.jobs[jid])
+                        && input.jobs[jid].deps.iter().all(|&j2| task_done[input.jobs[j2].id])
+                        && input.jobs[jid].can_finish(turn + d as usize, input.workers[i].l_max)
+                        && task_do.iter().all(|&jid2| jid2 != jid)
+                    });
+                    let closest = jobs_cando.min_by_key(|&(jid,d)| {
                         let arrive = turn + d as usize;
-                        let wait = j.start.saturating_sub(arrive);
-                        (wait + d as usize, j.id)
-                    })
-                    .min();
-                if closest.is_none() {
-                    turn_action.push(Action::Stay);
-                    continue;
-                }
-                let closest = closest.unwrap().1;
-                let closest_job = &input.jobs[closest];
-                // do_work
-                if cur_worker.pos == closest_job.v && cur_worker.pos2 == !0 {
-                    if !closest_job.can_do(turn) {
+                        let wait = input.jobs[jid].start.saturating_sub(arrive);
+                        wait + d as usize
+                    });
+                    if closest.is_none() {
                         turn_action.push(Action::Stay);
                         continue;
                     }
-                    let task_do = input.jobs[closest].n_task.min(cur_worker.l_max);
-                    turn_action.push(Action::Execute(closest_job.id, task_do));
+                    let closest = closest.unwrap().0;
+                    task_do[i] = closest;
+                }
+                // do_work
+                if cs.worker_pos[i].0 == input.jobs[task_do[i]].v && cs.worker_pos[i].1 == !0 {
+                    if !input.jobs[task_do[i]].can_do(turn) {
+                        turn_action.push(Action::Stay);
+                        continue;
+                    }
+                    let task_amount = cs.job_remain[task_do[i]].min(input.workers[i].l_max);
+                    turn_action.push(Action::Execute(task_do[i], task_amount));
+                    cs.apply_action(&input, &self.dist_pp, i, Action::Execute(task_do[i], task_amount));
 
-                    input.jobs[closest].n_task -= task_do;
-                    if input.jobs[closest].n_task == 0 {
-                        add_done.push(input.jobs[closest].id);
+                    if cs.job_remain[task_do[i]] == 0 {
+                        add_done.push(input.jobs[task_do[i]].id);
+                        task_do[i] = !0;
                     }
                 }
                 // move_to_duty
                 else {
-                    let p = cur_worker.pos;
-                    if p == closest_job.v {
-                        turn_action.push(Action::Move(p));
-                        input.workers[i].move_to(p, &self.dist_pp);
+                    let p = cs.worker_pos[i];
+                    let jp = input.jobs[task_do[i]].v;
+                    if p.0 == jp {
+                        turn_action.push(Action::Move(p.0));
+                        cs.apply_action(&input, &self.dist_pp, i, Action::Move(p.0));
                     } else {
-                        turn_action.push(Action::Move(self.par_pp[closest_job.v][p]));
-                        input.workers[i].move_to(self.par_pp[closest_job.v][p], &self.dist_pp);
+                        turn_action.push(Action::Move(self.par_pp[jp][p.0]));
+                        cs.apply_action(&input, &self.dist_pp, i, Action::Move(self.par_pp[jp][p.0]));
                     }
                 }
             }
@@ -543,98 +542,9 @@ impl Solver {
             for add in add_done {
                 task_done[add] = true;
             }
+            cs.tick();
         }
         Output::new(res)
-    }
-    // 各ワーカーごとにする仕事を割り当てて愚直にやった場合の報酬を焼きなます
-    // ワーカーにジョブを追加する、ジョブを削除する、ジョブを消して新しいジョブを追加するが近傍
-    fn run(
-        &self,
-        input: &Input,
-        jobs: &Vec<Vec<usize>>,
-    ) -> (Vec<Vec<Action>>, u64) {
-        let mut res = vec![];
-        let mut score = 0;
-        let mut cs = State::from_input(input);
-        for t in 0..input.t_max {
-            let mut turn_action = vec![];
-            for i in 0..input.n_worker {
-                let mn = jobs[i].iter().min_by_key(|&x| {
-                    if t > input.jobs[*x].end {
-                        1 << 30
-                    } else {
-                        input.jobs[*x].start
-                    }
-                });
-                if mn.is_none() {
-                    turn_action.push(Action::Stay);
-                    continue;
-                }
-                let mn = *mn.unwrap();
-                if input.jobs[mn].v == cs.worker_pos[i].0 && cs.worker_pos[i].2 == 0 {
-                    if input.jobs[mn].get_reward(t) == 0 || cs.job_remain[mn] == 0 {
-                        turn_action.push(Action::Stay);
-                        continue;
-                    }
-                    let a = input.workers[i].l_max.min(cs.job_remain[mn]);
-                    turn_action.push(Action::Execute(mn, a));
-                    cs.apply_action(input, &self.dist_pp, i, Action::Execute(mn, a));
-                    score += a as u64 * input.jobs[mn].get_reward(t);
-                } else {
-                    let p = cs.worker_pos[i].0;
-                    if p == input.jobs[mn].v {
-                        // eprintln!("up:{}",p);
-                        turn_action.push(Action::Move(p));
-                        cs.apply_action(input, &self.dist_pp, i, Action::Move(p));
-                    } else {
-                        // eprintln!("down:{}",self.par_pp[input.jobs[mn].v][p]);
-                        turn_action.push(Action::Move(self.par_pp[input.jobs[mn].v][p]));
-                        cs.apply_action(
-                            input,
-                            &self.dist_pp,
-                            i,
-                            Action::Move(self.par_pp[input.jobs[mn].v][p]),
-                        );
-                    }
-                }
-            }
-            cs.tick();
-            res.push(turn_action)
-        }
-        (res, score)
-    }
-    // beam search
-    fn solve3(self,input: Input) -> Output {
-        let mut cur_states = vec![(State::from_input(&input),vec![])];
-        // let beam_breadth = input.n_worker * 100;
-        const BEAM: usize = 100;
-        for turn in 0..input.t_max {
-            let mut next_actions = vec![];
-            next_actions.reserve(cur_states.len());
-            for (i,(state,_)) in cur_states.iter().enumerate() {
-                let ca = state.next_actions(&input, &self.pos_work, BEAM);
-                for c in ca {
-                    next_actions.push((i,c.0,c.1));
-                }
-            }
-            if next_actions.len() > BEAM {
-                next_actions.select_nth_unstable_by_key(BEAM, |x| Reverse(x.2));
-                next_actions.truncate(BEAM);
-            }
-            let mut next_states = vec![];
-            next_states.reserve(next_actions.len());
-            for (idx,actions,_score) in next_actions {
-                let mut next_state = cur_states[idx].0.clone();
-                let mut next_actions = cur_states[idx].1.clone();
-                next_state.apply(&input, &self.dist_pp, &actions);
-                next_actions.push(actions);
-                next_states.push((next_state,next_actions));
-            }
-            cur_states = next_states;
-        }
-        let ans = cur_states
-            .iter().max_by_key(|&x| x.0.score(&input));
-        Output::new(ans.unwrap().clone().1)
     }
 }
 
