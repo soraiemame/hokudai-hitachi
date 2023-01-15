@@ -1,6 +1,9 @@
 use proconio::{input, marker::Usize1, source::line::LineSource};
-use std::{io::{BufReader, Stdin}};
 use rand::prelude::*;
+use std::collections::HashMap;
+use std::io::{BufReader, Stdin};
+use std::mem::size_of;
+use std::{cmp::Reverse, collections::BinaryHeap, collections::VecDeque};
 
 fn main() {
     get_time();
@@ -8,11 +11,12 @@ fn main() {
         proconio::source::line::LineSource::new(std::io::BufReader::new(std::io::stdin()));
     let input = Input::from_stdin(&mut stdin);
     // eprintln!("{:?}",get_time());
-    let solver = Solver::new();
+    let solver = Solver::new(&input);
     // let output = solver.solve(input);
-    let output = solver.solve2(input);
+    // let output = solver.solve2(input);
+    let output = solver.solve3(input);
     // eprintln!("{:?}",get_time());
-    print!("{}",output.to_string());
+    print!("{}", output.to_string());
     input! {
         from &mut stdin,
         score: u64
@@ -175,7 +179,7 @@ impl Job {
                 let t_prev = raw_reward[i].0 - 1;
                 let t_next = raw_reward[i + 1].0 - 1;
                 reward.push(
-                    (y_next - y_prev) * (t - t_prev) as u64 / (t_next - t_prev) as u64 + y_prev
+                    (y_next - y_prev) * (t - t_prev) as u64 / (t_next - t_prev) as u64 + y_prev,
                 );
             }
         }
@@ -190,8 +194,12 @@ impl Job {
             deps,
         }
     }
-    fn get_reward(&self,t: usize) -> u64 {
-        if t <= self.start || self.end <= t {0} else {self.reward[t - self.start - 1]}
+    fn get_reward(&self, t: usize) -> u64 {
+        if t <= self.start || self.end <= t {
+            0
+        } else {
+            self.reward[t - self.start - 1]
+        }
     }
     fn can_finish(&self, start_turn: usize, l_max: u32) -> bool {
         let end_turn = start_turn + ((self.n_task + l_max - 1) / l_max as u32) as usize;
@@ -202,6 +210,7 @@ impl Job {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 enum Action {
     Stay,
     Move(usize),
@@ -212,7 +221,7 @@ enum Action {
 #[derive(Debug, Clone)]
 struct State {
     turn: usize,
-    worker_pos: Vec<(usize,usize,u32)>,
+    worker_pos: Vec<(usize, usize, u32)>,
     job_remain: Vec<u32>,
     reward_got: Vec<u64>,
 }
@@ -220,7 +229,7 @@ struct State {
 impl State {
     fn new(
         turn: usize,
-        worker_pos: Vec<(usize,usize,u32)>,
+        worker_pos: Vec<(usize, usize, u32)>,
         job_remain: Vec<u32>,
         reward_got: Vec<u64>,
     ) -> Self {
@@ -234,19 +243,125 @@ impl State {
     fn from_input(input: &Input) -> Self {
         let mut worker_pos = vec![];
         for i in 0..input.n_worker {
-            worker_pos.push((input.workers[i].pos,input.workers[i].pos2,input.workers[i].dist));
+            worker_pos.push((
+                input.workers[i].pos,
+                input.workers[i].pos2,
+                input.workers[i].dist,
+            ));
         }
         let mut job_remain = vec![];
         for i in 0..input.n_job {
             job_remain.push(input.jobs[i].n_task);
         }
-        let reward_got = vec![0;input.n_job];
+        let reward_got = vec![0; input.n_job];
         Self {
             turn: 0,
             worker_pos,
             job_remain,
-            reward_got
+            reward_got,
         }
+    }
+    fn next_actions(&self,input: &Input,pos_work: &Vec<Option<usize>>,num: usize) -> Vec<(Vec<Action>,u64)> {
+        let mut each_acts = vec![vec![];input.n_worker];
+        // 各ワーカーの良い行動を2つ取ってその行動の直積を取る
+        for i in 0..input.n_worker {
+            let cp_score = self.pos_score(input, pos_work, self.worker_pos[i].0);
+            if self.worker_pos[i].1 != !0 {
+                each_acts[i] = vec![(0,Action::Move(self.worker_pos[i].1))];
+                continue;
+            }
+            let mut cur = vec![];
+            if let Some(j) = pos_work[self.worker_pos[i].0] {
+                if input.workers[i].can_do(&input.jobs[j])
+                && input.jobs[j].deps.iter().all(|&x| self.job_remain[x] == 0)
+                && input.jobs[j].can_do(self.turn) {
+                    let a = input.workers[i].l_max.min(self.job_remain[i]);
+                    let execute_score =
+                        ((a as u64 * input.jobs[j].get_reward(self.turn)) as f64
+                        * (-(self.job_remain[j] as f64)).exp()) as u64;
+                        // * (input.jobs[j].n_task as u64 - self.job_remain[j] as u64) / input.jobs[j].n_task as u64;
+                    cur.push((cp_score + execute_score,Action::Execute(j, a)));
+                }
+            }
+            for &(to,cost) in &input.graph[self.worker_pos[i].0] {
+                let tp_score = self.pos_score(input, pos_work, to);
+                cur.push(((cp_score * (cost - 1) as u64 + tp_score) / cost as u64,Action::Move(to)));
+            }
+            cur.push((cp_score,Action::Stay));
+            if cur.len() > 2 {
+                cur.select_nth_unstable_by_key(2, |&x| Reverse(x.0));
+                cur.truncate(2);
+            }
+            each_acts[i] = cur;
+        }
+        let mut res: Vec<(Vec<Action>, u64)> = vec![(vec![],0)];
+        for i in 0..input.n_worker {
+            let mut cur = vec![];
+            for (cur_acts,cur_score) in &res {
+                for &(add,act) in &each_acts[i] {
+                    let mut nx = cur_acts.clone();
+                    nx.push(act);
+                    cur.push((nx,cur_score + add));
+                }
+            }
+            if cur.len() > num && i != input.n_worker - 1 {
+                cur.select_nth_unstable_by_key(num, |x| Reverse(x.1));
+                cur.truncate(num);
+            }
+            res = cur;
+        }
+        // 同じ仕事をやりすぎていないか
+        for i in 0..res.len() {
+            let mut cs = self.clone();
+            for j in 0..input.n_worker {
+                if let Action::Execute(idx, a) = res[i].0[j] {
+                    if cs.job_remain[idx] < a {
+                        if cs.job_remain[idx] == 0 {
+                            res[i].0[j] = Action::Stay;
+                        }
+                        else {
+                            res[i].0[j] = Action::Execute(idx, cs.job_remain[idx]);
+                        }
+                    }
+                    let dummy = vec![];
+                    cs.apply_action(input, &dummy, idx, res[i].0[j]);
+                }
+            }
+        }
+        res.sort_by_key(|x| Reverse(x.1));
+        res
+    }
+    // 現時点でのpのスコア
+    fn pos_score(&self,input: &Input,pos_work: &Vec<Option<usize>>,p: usize) -> u64 {
+        let mut res = 0;
+        let mut que = BinaryHeap::new();
+        que.push((0,p));
+        let mut dist: HashMap<usize, u64> = HashMap::new();
+        dist.insert(p, 0);
+        while let Some((d,x)) = que.pop() {
+            if dist.contains_key(&x) && *dist.get_key_value(&x).unwrap().1 < d {
+                continue;
+            }
+            if d > 10 {
+                break
+            }
+            if let Some(id) = pos_work[x] {
+                let cj = &input.jobs[id];
+                if self.turn + d as usize <= cj.start {
+                    res += cj.get_reward(cj.start + 1) / 2 / (d + 1) as u64;
+                }
+                else {
+                    res += cj.get_reward(cj.start + 1) / (d + 1) as u64;
+                }
+            }
+            for &(to,cost) in &input.graph[x] {
+                if !dist.contains_key(&to) || (d + cost as u64) < *dist.get_key_value(&to).unwrap().1 {
+                    dist.insert(to, d + cost as u64);
+                    que.push((d + cost as u64,to));
+                }
+            }
+        }
+        res
     }
     // 現時点で獲得した報酬の量、各ワーカーと各ジョブの位置関係を得点にする
     fn score(&self, input: &Input) -> u64 {
@@ -259,12 +374,9 @@ impl State {
         }
         res
     }
-    // fn next_states(&self, input: &Input) -> Vec<(Vec<Action>, State)> {
-    //     vec![]
-    // }
-    fn apply_action(&mut self,input: &Input,dist_pp: &Vec<Vec<u32>>,idx: usize,action: Action) {
+    fn apply_action(&mut self, input: &Input, dist_pp: &Vec<Vec<u32>>, idx: usize, action: Action) {
         match action {
-            Action::Stay => {},
+            Action::Stay => {}
             Action::Move(p) => {
                 if self.worker_pos[idx].1 == !0 {
                     self.worker_pos[idx].1 = p;
@@ -277,31 +389,59 @@ impl State {
                 } else {
                     self.worker_pos[idx].2 += 1;
                 }
-                if self.worker_pos[idx].2 == dist_pp[self.worker_pos[idx].0][self.worker_pos[idx].1] {
+                if self.worker_pos[idx].2 == dist_pp[self.worker_pos[idx].0][self.worker_pos[idx].1]
+                {
                     self.worker_pos[idx].0 = self.worker_pos[idx].1;
                     self.worker_pos[idx].1 = !0;
                     self.worker_pos[idx].2 = 0;
                 } else if self.worker_pos[idx].2 == 0 {
                     self.worker_pos[idx].1 = !0;
                 }
-            },
+            }
             Action::Execute(i, a) => {
                 self.job_remain[i] -= a;
                 self.reward_got[i] += input.jobs[i].get_reward(self.turn) * a as u64;
             }
         };
     }
-    fn tick(&mut self) {self.turn += 1;}
+    fn tick(&mut self) {
+        self.turn += 1;
+    }
+    fn try_apply(&self,op:usize,score:usize,hash:u64) -> (usize,u64) {
+        todo!()
+    }
+    fn apply(&mut self, input: &Input, dist_pp: &Vec<Vec<u32>>,actions: &Vec<Action>) {
+        for i in 0..input.n_worker {
+            self.apply_action(input, dist_pp, i, actions[i]);
+        }
+        self.tick();
+    }
+    fn back(&mut self,backup: u128){
+        todo!()
+    }
+    fn hash(&self)->u64{
+        todo!()
+    }
 }
 
-struct Solver;
+struct Solver {
+    dist_pp: Vec<Vec<u32>>,
+    par_pp: Vec<Vec<usize>>,
+    pos_work: Vec<Option<usize>>,
+}
 
 impl Solver {
-    fn new() -> Self {
-        Self {}
+    fn new(input: &Input) -> Self {
+        let (dist_pp,par_pp) = Solver::dijkstra(input);
+        let mut pos_work = vec![None;input.v];
+        for i in 0..input.n_job {
+            pos_work[input.jobs[i].v] = Some(i);
+        }
+        Self {
+            dist_pp,par_pp,pos_work
+        }
     }
-    fn dijkstra(&self, input: &Input) -> (Vec<Vec<u32>>, Vec<Vec<usize>>) {
-        use std::{cmp::Reverse, collections::BinaryHeap};
+    fn dijkstra(input: &Input) -> (Vec<Vec<u32>>, Vec<Vec<usize>>) {
         let mut res = vec![];
         res.reserve(input.v);
         let mut par = vec![vec![!0usize; input.v]; input.v];
@@ -327,16 +467,15 @@ impl Solver {
         (res, par)
     }
     fn solve(self, mut input: Input) -> Output {
-        let (dist_pp, par_pp) = self.dijkstra(&input);
-        eprintln!("{:?}",get_time());
+        eprintln!("{:?}", get_time());
         let dist = |w: &Worker, t: usize| -> u32 {
             if w.pos2 == !0 {
-                dist_pp[w.pos][t]
+                self.dist_pp[w.pos][t]
             } else {
-                if dist_pp[w.pos][t] < dist_pp[w.pos2][t] {
-                    dist_pp[w.pos][t] + w.dist
+                if self.dist_pp[w.pos][t] < self.dist_pp[w.pos2][t] {
+                    self.dist_pp[w.pos][t] + w.dist
                 } else {
-                    dist_pp[w.pos][t] - (dist_pp[w.pos][w.pos2] - w.dist)
+                    self.dist_pp[w.pos][t] - (self.dist_pp[w.pos][w.pos2] - w.dist)
                 }
             }
         };
@@ -375,7 +514,6 @@ impl Solver {
                 let closest = closest.unwrap().1;
                 let closest_job = &input.jobs[closest];
                 // do_work
-                // if dist_pp[closest_job.v][cur_worker.pos] == 0 {
                 if cur_worker.pos == closest_job.v && cur_worker.pos2 == !0 {
                     if !closest_job.can_do(turn) {
                         turn_action.push(Action::Stay);
@@ -394,10 +532,10 @@ impl Solver {
                     let p = cur_worker.pos;
                     if p == closest_job.v {
                         turn_action.push(Action::Move(p));
-                        input.workers[i].move_to(p, &dist_pp);
+                        input.workers[i].move_to(p, &self.dist_pp);
                     } else {
-                        turn_action.push(Action::Move(par_pp[closest_job.v][p]));
-                        input.workers[i].move_to(par_pp[closest_job.v][p], &dist_pp);
+                        turn_action.push(Action::Move(self.par_pp[closest_job.v][p]));
+                        input.workers[i].move_to(self.par_pp[closest_job.v][p], &self.dist_pp);
                     }
                 }
             }
@@ -410,79 +548,24 @@ impl Solver {
     }
     // 各ワーカーごとにする仕事を割り当てて愚直にやった場合の報酬を焼きなます
     // ワーカーにジョブを追加する、ジョブを削除する、ジョブを消して新しいジョブを追加するが近傍
-    fn solve2(self, mut input: Input) -> Output {
-        let (dist_pp, par_pp) = self.dijkstra(&input);
-        let mut rng = rand_pcg::Pcg64Mcg::seed_from_u64(432908);
-        let mut res = vec![];
-        let mut mx_score = 0;
-        let mut selected = vec![vec![];input.n_worker];
-        let mut used = vec![false;input.n_job];
-        let mut uf = acl::Dsu::new(input.n_job);
-        for i in 0..input.n_job {
-            for &x in &input.jobs[i].deps {
-                uf.merge(i, x);
-            }
-        }
-        let groups = uf.groups();
-        let mut ids = vec![0;input.n_job];
-        for (i,g) in groups.iter().enumerate() {
-            for k in g {
-                ids[*k] = i;
-            }
-        }
-        loop {
-            let cur = get_time();
-            if cur > 4.95 {
-                break;
-            }
-            let t = rng.gen::<i32>() % 3;
-            // delete add
-            if t == 0 {
-                continue;
-            }
-            // add
-            else if t == 1 {
-                let mut j_idx = rng.gen_range(0, input.n_job);
-                let mut cnt = 0;
-                while (used[j_idx] || input.jobs[j_idx].deps.len() != 0) && cnt < 10 {
-                    j_idx = rng.gen_range(0, input.n_job);
-                    cnt += 1;
-                }
-                if cnt == 10 {
-                    continue;
-                }
-                let w_idx = rng.gen_range(0, input.n_worker);
-                if !input.workers[w_idx].can_do(&input.jobs[j_idx]) {
-                    continue;
-                }
-                selected[w_idx].push(j_idx);
-                used[j_idx] = true;
-                let (acts,score) = self.run(&input, &dist_pp,&par_pp, &selected);
-                if chmax!(mx_score,score) {
-                    res = acts;
-                }
-            }
-            // delete
-            else {
-                continue;
-                let w_idx = rng.gen_range(0, input.n_worker);
-                if selected[w_idx].len() == 0 {
-                    continue;
-                }
-                let j_idx = rng.gen_range(0, selected[w_idx].len());
-                selected[w_idx].swap_remove(j_idx);
-            }
-        }
-        Output::new(res)
-    }
-    fn run(&self,input: &Input,dist_pp: &Vec<Vec<u32>>,par_pp: &Vec<Vec<usize>>,jobs: &Vec<Vec<usize>>) -> (Vec<Vec<Action>>,u64) {
+    fn run(
+        &self,
+        input: &Input,
+        jobs: &Vec<Vec<usize>>,
+    ) -> (Vec<Vec<Action>>, u64) {
         let mut res = vec![];
         let mut score = 0;
         let mut cs = State::from_input(input);
         for t in 0..input.t_max {
             let mut turn_action = vec![];
             for i in 0..input.n_worker {
-                let mn = jobs[i].iter().min_by_key(|&x| if t > input.jobs[*x].end {1 << 30}else{input.jobs[*x].start});
+                let mn = jobs[i].iter().min_by_key(|&x| {
+                    if t > input.jobs[*x].end {
+                        1 << 30
+                    } else {
+                        input.jobs[*x].start
+                    }
+                });
                 if mn.is_none() {
                     turn_action.push(Action::Stay);
                     continue;
@@ -495,112 +578,75 @@ impl Solver {
                     }
                     let a = input.workers[i].l_max.min(cs.job_remain[mn]);
                     turn_action.push(Action::Execute(mn, a));
-                    cs.apply_action(input, dist_pp, i, Action::Execute(mn, a));
+                    cs.apply_action(input, &self.dist_pp, i, Action::Execute(mn, a));
                     score += a as u64 * input.jobs[mn].get_reward(t);
-                }
-                else {
+                } else {
                     let p = cs.worker_pos[i].0;
                     if p == input.jobs[mn].v {
                         // eprintln!("up:{}",p);
                         turn_action.push(Action::Move(p));
-                        cs.apply_action(input, dist_pp, i, Action::Move(p));
+                        cs.apply_action(input, &self.dist_pp, i, Action::Move(p));
                     } else {
-                        // eprintln!("down:{}",par_pp[input.jobs[mn].v][p]);
-                        turn_action.push(Action::Move(par_pp[input.jobs[mn].v][p]));
-                        cs.apply_action(input, dist_pp, i, Action::Move(par_pp[input.jobs[mn].v][p]));
+                        // eprintln!("down:{}",self.par_pp[input.jobs[mn].v][p]);
+                        turn_action.push(Action::Move(self.par_pp[input.jobs[mn].v][p]));
+                        cs.apply_action(
+                            input,
+                            &self.dist_pp,
+                            i,
+                            Action::Move(self.par_pp[input.jobs[mn].v][p]),
+                        );
                     }
                 }
             }
             cs.tick();
             res.push(turn_action)
         }
-
-        (res,score)
+        (res, score)
     }
-    // fn solve_opt(self, mut input: Input) -> Output {
-    //     let (dist_pp, par_pp) = self.dijkstra(&input);
-    //     let dist = |w: &Worker, t: usize| -> u32 {
-    //         if w.pos2 == !0 {
-    //             dist_pp[w.pos][t]
-    //         } else {
-    //             if dist_pp[w.pos][t] < dist_pp[w.pos2][t] {
-    //                 dist_pp[w.pos][t] + w.dist
-    //             } else {
-    //                 dist_pp[w.pos][t] - (dist_pp[w.pos][w.pos2] - w.dist)
-    //             }
-    //         }
-    //     };
-    //     let mut job_recv = vec![vec![];input.n_worker];
-    //     // let mut res = vec![];
-    //     // res.reserve(input.t_max);
-
-    //     let mut task_done = vec![false; input.n_job];
-    //     let mut cs = State::from_input(&input);
-    //     for turn in 0..input.t_max {
-    //         let mut add_done = vec![];
-    //         for i in 0..input.n_worker {
-    //             let cur_worker = &input.workers[i];
-    //             let jobs_cando = input.jobs.iter().filter(|j| {
-    //                 let d = dist(&cur_worker, j.v);
-    //                 !task_done[j.id]
-    //                     && j.n_task != 0
-    //                     && cur_worker.can_do(j)
-    //                     && j.deps.iter().all(|&j2| task_done[input.jobs[j2].id])
-    //                     && j.can_finish(turn + d as usize, cur_worker.l_max)
-    //             });
-    //             let closest = jobs_cando
-    //                 .map(|j| {
-    //                     let d = dist(&cur_worker, j.v);
-    //                     let arrive = turn as u32 + d;
-    //                     let wait = j.start.saturating_sub(arrive);
-    //                     (wait + d, j.id)
-    //                 })
-    //                 .min();
-    //             if closest.is_none() {
-    //                 continue;
-    //             }
-    //             let closest = closest.unwrap().1;
-    //             let closest_job = &input.jobs[closest];
-    //             job_recv[i].push(closest);
-    //             if cur_worker.pos == closest_job.v && cur_worker.pos2 == !0 {
-    //                 if !closest_job.can_do(turn) {
-    //                     continue;
-    //                 }
-    //                 let task_do = input.jobs[closest].n_task.min(cur_worker.l_max);
-
-    //                 input.jobs[closest].n_task -= task_do;
-    //                 if input.jobs[closest].n_task == 0 {
-    //                     add_done.push(input.jobs[closest].id);
-    //                 }
-    //             }
-    //             // move_to_duty
-    //             else {
-    //                 let p = cur_worker.pos;
-    //                 if p == closest_job.v {
-                        
-    //                 } else {
-    //                 }
-    //             }
-    //         }
-    //         // res.push(turn_action);
-    //         for add in add_done {
-    //             task_done[add] = true;
-    //         }
-    //     }
-    //     Output::new(res)
-    // }
+    // beam search
+    fn solve3(self,input: Input) -> Output {
+        let mut cur_states = vec![(State::from_input(&input),vec![])];
+        // let beam_breadth = input.n_worker * 100;
+        const BEAM: usize = 100;
+        for turn in 0..input.t_max {
+            let mut next_actions = vec![];
+            next_actions.reserve(cur_states.len());
+            for (i,(state,_)) in cur_states.iter().enumerate() {
+                let ca = state.next_actions(&input, &self.pos_work, BEAM);
+                for c in ca {
+                    next_actions.push((i,c.0,c.1));
+                }
+            }
+            if next_actions.len() > BEAM {
+                next_actions.select_nth_unstable_by_key(BEAM, |x| Reverse(x.2));
+                next_actions.truncate(BEAM);
+            }
+            let mut next_states = vec![];
+            next_states.reserve(next_actions.len());
+            for (idx,actions,_score) in next_actions {
+                let mut next_state = cur_states[idx].0.clone();
+                let mut next_actions = cur_states[idx].1.clone();
+                next_state.apply(&input, &self.dist_pp, &actions);
+                next_actions.push(actions);
+                next_states.push((next_state,next_actions));
+            }
+            cur_states = next_states;
+        }
+        let ans = cur_states
+            .iter().max_by_key(|&x| x.0.score(&input));
+        Output::new(ans.unwrap().clone().1)
+    }
 }
 
 
+
 struct Output {
-    actions: Vec<Vec<Action>>
+    actions: Vec<Vec<Action>>,
 }
 
 impl Output {
     fn new(actions: Vec<Vec<Action>>) -> Self {
-        Self {
-            actions
-        }
+        Self { actions }
     }
     fn to_string(self) -> String {
         let mut res = String::from("");
@@ -693,7 +739,9 @@ pub mod acl {
 
 pub fn get_time() -> f64 {
     static mut STIME: f64 = -1.0;
-    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap();
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap();
     let ms = t.as_secs() as f64 + t.subsec_nanos() as f64 * 1e-9;
     unsafe {
         if STIME < 0.0 {
@@ -785,7 +833,7 @@ mod macros {
             }
         }};
     }
- 
+
     #[macro_export]
     macro_rules! chmax {
         ($base:expr, $($cmps:expr),+ $(,)*) => {{
@@ -798,7 +846,7 @@ mod macros {
             }
         }};
     }
- 
+
     #[macro_export]
     macro_rules! min {
         ($a:expr $(,)*) => {{
@@ -823,7 +871,7 @@ mod macros {
             std::cmp::max($a, max!($($rest),+))
         }};
     }
- 
+
     #[macro_export]
     macro_rules! mat {
         ($e:expr; $d:expr) => { vec![$e; $d] };
