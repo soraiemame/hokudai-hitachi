@@ -175,7 +175,8 @@ impl Job {
                 let t_prev = raw_reward[i].0;
                 let t_next = raw_reward[i + 1].0;
                 reward.push(
-                    ((y_next - y_prev) * (t - t_prev) as i64 / (t_next - t_prev) as i64 + y_prev) as u64
+                    ((y_next - y_prev) * (t - t_prev) as i64 / (t_next - t_prev) as i64 + y_prev)
+                        as u64,
                 );
             }
         }
@@ -218,7 +219,7 @@ struct State {
     job_remain: Vec<u32>,
     reward_got: Vec<u64>,
     job_done: Vec<bool>,
-    add_done: Vec<usize>
+    add_done: Vec<usize>,
 }
 
 impl State {
@@ -242,12 +243,15 @@ impl State {
             worker_pos,
             job_remain,
             reward_got,
-            job_done: vec![false;input.n_job],
-            add_done: vec![]
+            job_done: vec![false; input.n_job],
+            add_done: vec![],
         }
     }
-    fn can_finish(&self,input: &Input,start_turn: usize,wid: usize,jid: usize) -> bool {
-        let end_turn = start_turn + ((self.job_remain[jid] + input.workers[wid].l_max - 1) / input.workers[wid].l_max as u32) as usize - 1;
+    fn can_finish(&self, input: &Input, start_turn: usize, wid: usize, jid: usize) -> bool {
+        let end_turn = start_turn
+            + ((self.job_remain[jid] + input.workers[wid].l_max - 1)
+                / input.workers[wid].l_max as u32) as usize
+            - 1;
         end_turn < input.jobs[jid].end
     }
     fn apply_action(&mut self, input: &Input, dist_pp: &Vec<Vec<u32>>, idx: usize, action: Action) {
@@ -291,12 +295,19 @@ impl State {
         }
         self.add_done.clear();
     }
-    fn apply(&mut self, input: &Input, dist_pp: &Vec<Vec<u32>>,actions: &Vec<Action>) {
+    fn apply(&mut self, input: &Input, dist_pp: &Vec<Vec<u32>>, actions: &Vec<Action>) {
         for i in 0..input.n_worker {
             self.apply_action(input, dist_pp, i, actions[i]);
         }
     }
-    fn rand_action(&mut self,input: &Input,rng: &mut rand_pcg::Pcg64Mcg,pos_work: &Vec<Vec<usize>>,dist_pp: &Vec<Vec<u32>>,num_turn: usize) -> Vec<Vec<Action>> {
+    fn rand_action(
+        &mut self,
+        input: &Input,
+        rng: &mut rand_pcg::Pcg64Mcg,
+        pos_work: &Vec<Vec<usize>>,
+        dist_pp: &Vec<Vec<u32>>,
+        num_turn: usize,
+    ) -> Vec<Vec<Action>> {
         let mut res = vec![];
         res.reserve(num_turn);
         for _ in 0..num_turn {
@@ -310,21 +321,36 @@ impl State {
                 let mut acts = vec![];
                 for &k in &pos_work[self.worker_pos[j].0] {
                     // ここ見直す
-                    if input.jobs[k].can_do(self.turn) && 
-                        !self.job_done[k]
+                    if input.jobs[k].can_do(self.turn)
+                        && !self.job_done[k]
                         && self.job_remain[k] != 0
                         && input.workers[j].can_do(&input.jobs[k])
-                        && input.jobs[k].deps.iter().all(|&j2| self.job_done[input.jobs[j2].id])
+                        && input.jobs[k]
+                            .deps
+                            .iter()
+                            .all(|&j2| self.job_done[input.jobs[j2].id])
                         && self.can_finish(input, self.turn as usize + 1, j, k)
-                        {
-                            assert_ne!(input.workers[j].l_max.min(self.job_remain[k]),0);
-                            acts.push(Action::Execute(k, input.workers[j].l_max.min(self.job_remain[k])));
-                            acts.push(Action::Execute(k, input.workers[j].l_max.min(self.job_remain[k])));
-                            acts.push(Action::Execute(k, input.workers[j].l_max.min(self.job_remain[k])));
-                            acts.push(Action::Execute(k, input.workers[j].l_max.min(self.job_remain[k])));
-                        }
+                    {
+                        assert_ne!(input.workers[j].l_max.min(self.job_remain[k]), 0);
+                        acts.push(Action::Execute(
+                            k,
+                            input.workers[j].l_max.min(self.job_remain[k]),
+                        ));
+                        acts.push(Action::Execute(
+                            k,
+                            input.workers[j].l_max.min(self.job_remain[k]),
+                        ));
+                        acts.push(Action::Execute(
+                            k,
+                            input.workers[j].l_max.min(self.job_remain[k]),
+                        ));
+                        acts.push(Action::Execute(
+                            k,
+                            input.workers[j].l_max.min(self.job_remain[k]),
+                        ));
+                    }
                 }
-                for &(k,_) in &input.graph[self.worker_pos[j].0] {
+                for &(k, _) in &input.graph[self.worker_pos[j].0] {
                     acts.push(Action::Move(k));
                     acts.push(Action::Move(k));
                 }
@@ -348,13 +374,15 @@ struct Solver {
 
 impl Solver {
     fn new(input: &Input) -> Self {
-        let (dist_pp,par_pp) = Solver::dijkstra(input);
-        let mut pos_work = vec![vec![];input.v];
+        let (dist_pp, par_pp) = Solver::dijkstra(input);
+        let mut pos_work = vec![vec![]; input.v];
         for i in 0..input.n_job {
             pos_work[input.jobs[i].v].push(i);
         }
         Self {
-            dist_pp,par_pp,pos_work
+            dist_pp,
+            par_pp,
+            pos_work,
         }
     }
     fn dijkstra(input: &Input) -> (Vec<Vec<u32>>, Vec<Vec<usize>>) {
@@ -382,7 +410,7 @@ impl Solver {
         }
         (res, par)
     }
-    fn dist(&self,p: (usize,usize,u32),to: usize) -> u32 {
+    fn dist(&self, p: (usize, usize, u32), to: usize) -> u32 {
         if p.1 == !0 {
             self.dist_pp[p.0][to]
         } else {
@@ -398,7 +426,7 @@ impl Solver {
         let mut res = self.run(&input, &mut cs);
         let mut rng = rand_pcg::Pcg64Mcg::new(0xfedcba9876543210fedcba9876543210);
         let mut loop_cnt = 0;
-        eprintln!("{}",res.len());
+        eprintln!("{}", res.len());
         loop {
             let t = get_time();
             if t >= 4.9 {
@@ -428,11 +456,11 @@ impl Solver {
                 }
             }
         }
-        eprintln!("loop_cnt: {}",loop_cnt);
+        eprintln!("loop_cnt: {}", loop_cnt);
         let res = self.improve_actions(&input, res);
         Output::new(res)
     }
-    fn run(&self, input: &Input,cs: &mut State) -> Vec<Vec<Action>> {
+    fn run(&self, input: &Input, cs: &mut State) -> Vec<Vec<Action>> {
         let mut res = vec![];
         res.reserve(input.t_max);
 
@@ -443,16 +471,19 @@ impl Solver {
             for i in 0..input.n_worker {
                 if task_do[i] == !0 || cs.job_remain[task_do[i]] == 0 {
                     let jobs_cando = (0..input.n_job)
-                        .map(|jid| (jid,self.dist(cs.worker_pos[i],input.jobs[jid].v)))
-                        .filter(|&(jid,d)| {
-                        !cs.job_done[jid]
-                        && cs.job_remain[jid] != 0
-                        && input.workers[i].can_do(&input.jobs[jid])
-                        && input.jobs[jid].deps.iter().all(|&j2| cs.job_done[input.jobs[j2].id])
-                        && cs.can_finish(input, turn + d as usize + 1, i, jid)
-                        && task_do.iter().all(|&jid2| jid2 != jid)
-                    });
-                    let closest = jobs_cando.min_by_key(|&(jid,d)| {
+                        .map(|jid| (jid, self.dist(cs.worker_pos[i], input.jobs[jid].v)))
+                        .filter(|&(jid, d)| {
+                            !cs.job_done[jid]
+                                && cs.job_remain[jid] != 0
+                                && input.workers[i].can_do(&input.jobs[jid])
+                                && input.jobs[jid]
+                                    .deps
+                                    .iter()
+                                    .all(|&j2| cs.job_done[input.jobs[j2].id])
+                                && cs.can_finish(input, turn + d as usize + 1, i, jid)
+                                && task_do.iter().all(|&jid2| jid2 != jid)
+                        });
+                    let closest = jobs_cando.min_by_key(|&(jid, d)| {
                         let arrive = turn + d as usize;
                         let wait = input.jobs[jid].start.saturating_sub(arrive);
                         wait + d as usize
@@ -471,9 +502,14 @@ impl Solver {
                         continue;
                     }
                     let task_amount = cs.job_remain[task_do[i]].min(input.workers[i].l_max);
-                    assert_ne!(task_amount,0);
+                    assert_ne!(task_amount, 0);
                     turn_action.push(Action::Execute(task_do[i], task_amount));
-                    cs.apply_action(&input, &self.dist_pp, i, Action::Execute(task_do[i], task_amount));
+                    cs.apply_action(
+                        &input,
+                        &self.dist_pp,
+                        i,
+                        Action::Execute(task_do[i], task_amount),
+                    );
 
                     if cs.job_remain[task_do[i]] == 0 {
                         task_do[i] = !0;
@@ -488,7 +524,12 @@ impl Solver {
                         cs.apply_action(&input, &self.dist_pp, i, Action::Move(p.0));
                     } else {
                         turn_action.push(Action::Move(self.par_pp[jp][p.0]));
-                        cs.apply_action(&input, &self.dist_pp, i, Action::Move(self.par_pp[jp][p.0]));
+                        cs.apply_action(
+                            &input,
+                            &self.dist_pp,
+                            i,
+                            Action::Move(self.par_pp[jp][p.0]),
+                        );
                     }
                 }
             }
@@ -498,13 +539,13 @@ impl Solver {
         res
     }
     // 仕事の順序を変える
-    fn improve_actions(&self,input: &Input,actions: Vec<Vec<Action>>) -> Vec<Vec<Action>> {
+    fn improve_actions(&self, input: &Input, actions: Vec<Vec<Action>>) -> Vec<Vec<Action>> {
         let mut res = actions.clone();
-        let mut did = vec![vec![];input.n_job];
+        let mut did = vec![vec![]; input.n_job];
         for i in 0..input.t_max {
             for j in 0..input.n_worker {
                 if let Action::Execute(idx, _a) = actions[i][j] {
-                    did[idx].push((i,j));
+                    did[idx].push((i, j));
                 }
             }
         }
@@ -514,11 +555,11 @@ impl Solver {
             }
             // 最後に仕事量をいくら余らせたか
             let mut rem = {
-                let mut rem = (!0,!0,0);
-                for &(t,w) in &did[i] {
+                let mut rem = (!0, !0, 0);
+                for &(t, w) in &did[i] {
                     if let Action::Execute(_, a) = actions[t][w] {
                         if input.workers[w].l_max != a {
-                            rem = (t,w,input.workers[w].l_max - a);
+                            rem = (t, w, input.workers[w].l_max - a);
                         }
                     }
                 }
@@ -527,13 +568,20 @@ impl Solver {
             if rem.2 == 0 {
                 continue;
             }
-            let least = did[i].iter().min_by_key(|(t,_w)| {
-                input.jobs[i].get_reward(*t);
-            }).unwrap();
-            if let Action::Execute(_,a1) = res[least.0][least.1] {
-                if let Action::Execute(_,a2) = res[rem.0][rem.1] {
+            let least = did[i]
+                .iter()
+                .min_by_key(|(t, _w)| {
+                    input.jobs[i].get_reward(*t);
+                })
+                .unwrap();
+            if let Action::Execute(_, a1) = res[least.0][least.1] {
+                if let Action::Execute(_, a2) = res[rem.0][rem.1] {
                     rem.2 = rem.2.min(a1);
-                    res[least.0][least.1] = if a1 - rem.2 == 0 {Action::Stay} else{Action::Execute(i, a1 - rem.2)};
+                    res[least.0][least.1] = if a1 - rem.2 == 0 {
+                        Action::Stay
+                    } else {
+                        Action::Execute(i, a1 - rem.2)
+                    };
                     res[rem.0][rem.1] = Action::Execute(i, a2 + rem.2);
                 }
             }
@@ -541,8 +589,6 @@ impl Solver {
         res
     }
 }
-
-
 
 struct Output {
     actions: Vec<Vec<Action>>,
