@@ -330,9 +330,10 @@ impl State {
                             .deps
                             .iter()
                             .all(|&j2| self.job_done[input.jobs[j2].id])
-                        && self.can_finish(input, self.turn as usize + 1, j, k)
+                        && self.can_finish(input, self.turn as usize, j, k)
                     {
                         assert_ne!(input.workers[j].l_max.min(self.job_remain[k]), 0);
+                        assert!(input.jobs[k].can_do(self.turn));
                         jid = k;
                         let act = Action::Execute(k,input.workers[j].l_max.min(self.job_remain[k]));
                         acts.push(act);
@@ -454,9 +455,10 @@ impl Solver {
         let res = self.improve_actions(&input, res);
         Output::new(res)
     }
-    fn get_jobs_around(&self,idx: usize,d: usize) -> Vec<usize> {
-        // let mut que = VecDeque::new();
-        // let mut visit = HashMap::new;
+    fn get_jobs_around(&self,input: &Input,w_idx: usize,d: usize) -> Vec<usize> {
+        // let mut que = BinaryHeap::new();
+        // let mut visit = HashMap::new();
+        // que.push_back((self.pos_work));
         todo!()
     }
     fn run(&self, input: &Input, cs: &mut State) -> Vec<Vec<Action>> {
@@ -503,6 +505,7 @@ impl Solver {
                     }
                     let task_amount = cs.job_remain[task_do[i]].min(input.workers[i].l_max);
                     assert_ne!(task_amount, 0);
+                    assert!(input.jobs[task_do[i]].can_do(turn));
                     turn_action.push(Action::Execute(task_do[i], task_amount));
                     cs.apply_action(
                         &input,
