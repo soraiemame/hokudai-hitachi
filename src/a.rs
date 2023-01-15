@@ -172,8 +172,8 @@ impl Job {
             for t in raw_reward[i].0..raw_reward[i + 1].0 {
                 let y_prev = raw_reward[i].1 as i64;
                 let y_next = raw_reward[i + 1].1 as i64;
-                let t_prev = raw_reward[i].0;
-                let t_next = raw_reward[i + 1].0;
+                let t_prev = raw_reward[i].0 - 1;
+                let t_next = raw_reward[i + 1].0 - 1;
                 reward.push(
                     ((y_next - y_prev) * (t - t_prev) as i64 / (t_next - t_prev) as i64 + y_prev)
                         as u64,
@@ -455,10 +455,12 @@ impl Solver {
         let res = self.improve_actions(&input, res);
         Output::new(res)
     }
-    fn get_jobs_around(&self,input: &Input,w_idx: usize,d: usize) -> Vec<usize> {
-        // let mut que = BinaryHeap::new();
-        // let mut visit = HashMap::new();
-        // que.push_back((self.pos_work));
+    fn get_jobs_around(&self,input: &Input,cs: &State,dist_pp: &Vec<Vec<u32>>,w_idx: usize,d: usize) -> Vec<usize> {
+        let mut que = BinaryHeap::new();
+        let mut visit = HashMap::new();
+        que.push((cs.worker_pos[w_idx].2,cs.worker_pos[w_idx].0));
+        que.push((cs.worker_pos[w_idx].2,cs.worker_pos[w_idx].0));
+        visit.insert(cs.worker_pos[w_idx].0,cs.worker_pos[w_idx].2);
         todo!()
     }
     fn run(&self, input: &Input, cs: &mut State) -> Vec<Vec<Action>> {
