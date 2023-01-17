@@ -416,14 +416,15 @@ impl Solver {
                 break;
             }
             loop_cnt += 1;
+            const RT: usize = 1;
             let mut ns = State::from_input(&input);
-            let rl = (t / 4.0 * (input.t_max - 5) as f64) as usize;
-            let start = rng.gen_range(rl, rl + 5);
+            let rl = (t / 4.0 * (input.t_max - RT) as f64) as usize;
+            let start = rng.gen_range(rl, rl + RT);
             for i in 0..start {
                 ns.apply(&input, &self.dist_pp, &res[i]);
                 ns.tick();
             }
-            let rand_actions = ns.rand_action(&input, &mut rng, &self.pos_work, &self.dist_pp, 5);
+            let rand_actions = ns.rand_action(&input, &mut rng, &self.pos_work, &self.dist_pp, RT);
             let next_actions = self.run(&input, &mut ns);
             if ns.score > cs.score {
                 cs = ns;
