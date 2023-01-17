@@ -1,6 +1,5 @@
 use proconio::{input, marker::Usize1, source::line::LineSource};
 use rand::prelude::*;
-use rand_distr::Normal;
 use std::collections::HashMap;
 use std::io::{BufReader, Stdin};
 use std::{cmp::Reverse, collections::BinaryHeap, collections::VecDeque};
@@ -10,18 +9,15 @@ fn main() {
     let mut stdin =
         proconio::source::line::LineSource::new(std::io::BufReader::new(std::io::stdin()));
     let input = Input::from_stdin(&mut stdin);
-    // eprintln!("{:?}",get_time());
     let solver = Solver::new(&input);
     // let output = solver.solve(input);
     let output = solver.sa(input);
-    // eprintln!("{:?}",get_time());
     print!("{}", output.to_string());
     input! {
         from &mut stdin,
         score: u64
     }
     println!("{}", score);
-    // eprintln!("{:?}",get_time());
 }
 
 #[derive(Debug)]
@@ -120,23 +116,6 @@ impl Worker {
     }
     fn can_do(&self, job: &Job) -> bool {
         (self.types >> job.job_type & 1) != 0
-    }
-    fn move_to(&mut self, t: usize, dist_pp: &Vec<Vec<u32>>) {
-        if self.pos2 == !0 {
-            self.pos2 = t;
-        }
-        if dist_pp[self.pos][t] < dist_pp[self.pos2][t] {
-            self.dist -= 1;
-        } else {
-            self.dist += 1;
-        }
-        if self.dist == dist_pp[self.pos][self.pos2] {
-            self.pos = self.pos2;
-            self.pos2 = !0;
-            self.dist = 0;
-        } else if self.dist == 0 {
-            self.pos2 = !0;
-        }
     }
 }
 
@@ -430,20 +409,21 @@ impl Solver {
         let mut res = self.run(&input, &mut cs);
         let mut rng = rand_pcg::Pcg64Mcg::new(0xfedcba9876543210fedcba9876543210);
         let mut loop_cnt = 0;
+        eprintln!("initial score: {}", cs.score);
         loop {
             let t = get_time();
-            if t >= 4.9 {
+            if t >= 4.0 {
                 break;
             }
             loop_cnt += 1;
             let mut ns = State::from_input(&input);
-            let rl = (t / 5.0 * (input.t_max - 30) as f64) as usize + 10;
-            let start = rng.gen_range(rl, rl + 10);
+            let rl = (t / 4.0 * (input.t_max - 5) as f64) as usize;
+            let start = rng.gen_range(rl, rl + 5);
             for i in 0..start {
                 ns.apply(&input, &self.dist_pp, &res[i]);
                 ns.tick();
             }
-            let rand_actions = ns.rand_action(&input, &mut rng, &self.pos_work, &self.dist_pp, 10);
+            let rand_actions = ns.rand_action(&input, &mut rng, &self.pos_work, &self.dist_pp, 5);
             let next_actions = self.run(&input, &mut ns);
             if ns.score > cs.score {
                 cs = ns;
@@ -459,6 +439,7 @@ impl Solver {
             }
         }
         eprintln!("loop_cnt: {}", loop_cnt);
+        eprintln!("score: {}", cs.score);
         let res = self.improve_actions(&input, res);
         Output::new(res)
     }
@@ -502,7 +483,8 @@ impl Solver {
                 let wait = input.jobs[jid].start.saturating_sub(arrive);
                 let r = input.jobs[jid].get_reward(cs.turn + d as usize);
                 let nx = ((self.dist(cs.worker_pos[wid], v) + wait as u32) as f64
-                    * (2.0 - r as f64 / input.jobs[jid].max_reward as f64) * (2.0 - r as f64 / 1e7)) as u32;
+                    * (2.0 - r as f64 / input.jobs[jid].max_reward as f64)
+                    * (2.0 - r as f64 / 1e7)) as u32;
                 if res.is_none() {
                     res = Some(jid);
                     score = nx;
@@ -524,7 +506,8 @@ impl Solver {
                 let wait = input.jobs[jid].start.saturating_sub(arrive);
                 let r = input.jobs[jid].get_reward(cs.turn + d as usize);
                 let nx = ((self.dist(cs.worker_pos[wid], v) + wait as u32) as f64
-                * (2.0 - r as f64 / input.jobs[jid].max_reward as f64) * (2.0 - r as f64 / 1e7)) as u32;
+                    * (2.0 - r as f64 / input.jobs[jid].max_reward as f64)
+                    * (2.0 - r as f64 / 1e7)) as u32;
                 if res.is_none() {
                     res = Some(jid);
                     score = nx;

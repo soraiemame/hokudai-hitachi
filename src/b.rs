@@ -1,22 +1,13 @@
 use proconio::{input, marker::Usize1, source::line::LineSource};
 use std::io::{BufReader, Stdin};
+use std::{cmp::Reverse, collections::BinaryHeap};
 
 fn main() {
     let mut stdin =
         proconio::source::line::LineSource::new(std::io::BufReader::new(std::io::stdin()));
     let input = Input::from_stdin(&mut stdin);
-    let solver = Solver::new();
-    let output = solver.solve(input);
-    for turn in output {
-        for act in turn {
-            let act = match act {
-                Action::Stay => format!("stay"),
-                Action::Move(w) => format!("move {}", w + 1),
-                Action::Execute(i, a) => format!("execute {} {}", i + 1, a),
-            };
-            println!("{}", act);
-        }
-    }
+    let solver = Solver::new(&input);
+    solver.solve(&input);
     input! {
         from &mut stdin,
         score: u64
@@ -230,9 +221,15 @@ struct Job {
     penalty: f64,
     w_depend: f64,
     mandatory: bool,
-    reward: Vec<(u32, u64)>,
+    // (start,end)
+    start: usize,
+    end: usize,
+    // reward: Vec<(u32, u64)>,
+    reward: Vec<u64>,
     deps: Vec<usize>,
+    max_reward: u64,
 }
+
 impl Job {
     fn new(
         id: usize,
@@ -242,27 +239,50 @@ impl Job {
         penalty: f64,
         w_depend: f64,
         mandatory: bool,
-        reward: Vec<(u32, u64)>,
+        raw_reward: Vec<(u32, u64)>,
         deps: Vec<usize>,
     ) -> Self {
+        let start = raw_reward[0].0 as usize - 1;
+        let end = raw_reward[raw_reward.len() - 1].0 as usize - 1;
+        let mut reward = vec![];
+        let mut max_reward = 0;
+        for i in 0..raw_reward.len() - 1 {
+            for t in raw_reward[i].0..raw_reward[i + 1].0 {
+                let y_prev = raw_reward[i].1 as i64;
+                let y_next = raw_reward[i + 1].1 as i64;
+                let t_prev = raw_reward[i].0;
+                let t_next = raw_reward[i + 1].0;
+                chmax!(max_reward, y_prev as u64);
+                reward.push(
+                    ((y_next - y_prev) * (t - t_prev) as i64 / (t_next - t_prev) as i64 + y_prev)
+                        as u64,
+                );
+            }
+        }
         Self {
             id,
             job_type,
             n_task,
             v,
-            reward,
-            deps,
             penalty,
             w_depend,
             mandatory,
+            start,
+            end,
+            reward,
+            deps,
+            max_reward,
         }
     }
-    fn can_finish(&self, start_turn: usize, l_max: u32) -> bool {
-        let end_turn = start_turn as u32 + (self.n_task + l_max - 1) as u32 / l_max;
-        end_turn < self.reward[self.reward.len() - 1].0
+    fn get_reward(&self, t: usize) -> u64 {
+        if t <= self.start || self.end <= t {
+            0
+        } else {
+            self.reward[t - self.start]
+        }
     }
     fn can_do(&self, turn: usize) -> bool {
-        self.reward[0].0 < (turn as u32) && (turn as u32) < self.reward[self.reward.len() - 1].0
+        self.start < turn && turn < self.end
     }
 }
 
@@ -295,32 +315,38 @@ impl State {
             reward_got,
         }
     }
-    // 現時点で獲得した報酬の量、各ワーカーと各ジョブの位置関係を得点にする
-    fn score(&self, input: &Input) -> u64 {
-        let mut res = 0;
-        // cur score
-        for i in 0..input.n_job {
-            if self.job_remain[i] == 0 {
-                res += self.reward_got[i];
-            }
-        }
-        res
-    }
-    fn next_states(&self, input: &Input) -> Vec<(Vec<Action>, State)> {
-        // let mut res = vec![];
-
-        vec![]
-    }
+    
 }
 
-struct Solver;
+struct Solver {
+    dist_pp: Vec<Vec<u32>>,
+    ord: Vec<Vec<usize>>,
+    par_pp: Vec<Vec<usize>>,
+    pos_work: Vec<Vec<usize>>,
+}
 
 impl Solver {
-    fn new() -> Self {
-        Self {}
+    fn new(input: &Input) -> Self {
+        let (dist_pp, par_pp) = Solver::dijkstra(input);
+        let mut ord = vec![];
+        ord.reserve(input.v);
+        for i in 0..input.v {
+            let mut v = (0..input.v).collect::<Vec<_>>();
+            v.sort_by_key(|&x| dist_pp[i][x]);
+            ord.push(v);
+        }
+        let mut pos_work = vec![vec![]; input.v];
+        for i in 0..input.n_job {
+            pos_work[input.jobs[i].v].push(i);
+        }
+        Self {
+            dist_pp,
+            ord,
+            par_pp,
+            pos_work,
+        }
     }
-    fn dijkstra(&self, input: &Input) -> (Vec<Vec<u32>>, Vec<Vec<usize>>) {
-        use std::{cmp::Reverse, collections::BinaryHeap};
+    fn dijkstra(input: &Input) -> (Vec<Vec<u32>>, Vec<Vec<usize>>) {
         let mut res = vec![];
         res.reserve(input.v);
         let mut par = vec![vec![!0usize; input.v]; input.v];
@@ -345,92 +371,153 @@ impl Solver {
         }
         (res, par)
     }
-    fn solve(self, mut input: Input) -> Vec<Vec<Action>> {
-        let (dist_pp, par_pp) = self.dijkstra(&input);
-        let dist = |w: &Worker, t: usize| -> u32 {
-            if w.pos2 == !0 {
-                dist_pp[w.pos][t]
+    fn dist(&self, p: (usize, usize, u32), to: usize) -> u32 {
+        if p.1 == !0 {
+            self.dist_pp[p.0][to]
+        } else {
+            if self.dist_pp[p.0][to] < self.dist_pp[p.1][to] {
+                self.dist_pp[p.0][to] + p.2
             } else {
-                if dist_pp[w.pos][t] < dist_pp[w.pos2][t] {
-                    dist_pp[w.pos][t] + w.dist
-                } else {
-                    dist_pp[w.pos][t] - (dist_pp[w.pos][w.pos2] - w.dist)
-                }
-            }
-        };
-        let mut res = vec![];
-        res.reserve(input.t_max);
-
-        let mut task_done = vec![false; input.n_job];
-        for turn in 0..input.t_max {
-            let mut turn_action = vec![];
-            turn_action.reserve(input.t_max);
-            let mut add_done = vec![];
-            for i in 0..input.n_worker {
-                let cur_worker = &input.workers[i];
-                let jobs_cando = input.jobs.iter().filter(|j| {
-                    let d = dist(&cur_worker, j.v);
-                    !task_done[j.id]
-                        && j.n_task != 0
-                        && cur_worker.can_do(j)
-                        && j.deps.iter().all(|&j2| task_done[input.jobs[j2].id])
-                        && j.can_finish(turn + d as usize, cur_worker.l_max)
-                });
-                // let closest = jobs_cando.map(|j| (dist(&cur_worker, j.v), j.id)).min();
-                // let closest = jobs_cando.map(|j| (j.reward[0].0, j.id)).min();
-                let closest = jobs_cando
-                    .map(|j| {
-                        let d = dist(&cur_worker, j.v);
-                        let arrive = turn as u32 + d;
-                        let wait = j.reward[0].0.saturating_sub(arrive);
-                        (wait + d, j.id)
-                    })
-                    .min();
-                if closest.is_none() {
-                    turn_action.push(Action::Stay);
-                    continue;
-                }
-                // eprintln!("dist: {:?}",closest.unwrap());
-                let closest = closest.unwrap().1;
-                let closest_job = &input.jobs[closest];
-                // eprintln!("v: {},id: {}",closest_job.v,closest_job.id);
-                // do_work
-                // if dist_pp[closest_job.v][cur_worker.pos] == 0 {
-                if cur_worker.pos == closest_job.v && cur_worker.pos2 == !0 {
-                    if !closest_job.can_do(turn) {
-                        turn_action.push(Action::Stay);
-                        continue;
-                    }
-                    let task_do = input.jobs[closest].n_task.min(cur_worker.l_max);
-                    turn_action.push(Action::Execute(closest_job.id, task_do));
-                    // turn_action.push(Action::Stay);
-
-                    input.jobs[closest].n_task -= task_do;
-                    if input.jobs[closest].n_task == 0 {
-                        // task_done[input.jobs[closest].id] = true;
-                        add_done.push(input.jobs[closest].id);
-                    }
-                }
-                // move_to_duty
-                else {
-                    let p = cur_worker.pos;
-                    if p == closest_job.v {
-                        turn_action.push(Action::Move(p));
-                        input.workers[i].move_to(p, &dist_pp);
-                    } else {
-                        turn_action.push(Action::Move(par_pp[closest_job.v][p]));
-                        input.workers[i].move_to(par_pp[closest_job.v][p], &dist_pp);
-                    }
-                }
-            }
-            res.push(turn_action);
-            for add in add_done {
-                task_done[add] = true;
+                self.dist_pp[p.0][to] - (self.dist_pp[p.0][p.1] - p.2)
             }
         }
-        res
     }
-    fn solve_beam_search(self, mut input: Input) -> Vec<Vec<Action>> {
-        vec![]
+    fn solve(&self,input: &Input) {
+        todo!();
+    }
+    fn get_jobs_around(
+        &self,
+        input: &Input,
+        cs: &State,
+        task_do: &Vec<usize>,
+        wid: usize,
+    ) -> Option<usize> {
+        todo!()
+    }
+    fn run(&self, input: &Input, cs: &mut State) -> Vec<Vec<Action>> {
+        todo!()
     }
 }
+
+
+
+#[macro_use]
+mod macros {
+    #[macro_export]
+    macro_rules! get {
+        ($t:ty) => {
+            {
+                let mut line: String = String::new();
+                std::io::stdin().read_line(&mut line).unwrap();
+                line.trim().parse::<$t>().unwrap()
+            }
+        };
+        ($($t:ty),*) => {
+            {
+                let mut line: String = String::new();
+                std::io::stdin().read_line(&mut line).unwrap();
+                let mut iter = line.split_whitespace();
+                (
+                    $(iter.next().unwrap().parse::<$t>().unwrap(),)*
+                )
+            }
+        };
+        ($t:ty; $n:expr) => {
+            (0..$n).map(|_|
+                get!($t)
+            ).collect::<Vec<_>>()
+        };
+        ($($t:ty),*; $n:expr) => {
+            (0..$n).map(|_|
+                get!($($t),*)
+            ).collect::<Vec<_>>()
+        };
+        ($t:ty ;;) => {
+            {
+                let mut line: String = String::new();
+                std::io::stdin().read_line(&mut line).unwrap();
+                line.split_whitespace()
+                    .map(|t| t.parse::<$t>().unwrap())
+                    .collect::<Vec<_>>()
+            }
+        };
+        ($t:ty ;; $n:expr) => {
+            (0..$n).map(|_| get!($t ;;)).collect::<Vec<_>>()
+        };
+    }
+    #[allow(unused_macros)]
+    #[cfg(debug_assertions)]
+    #[macro_export]
+    macro_rules! debug {
+        ( $x: expr, $($rest:expr),* ) => {
+            eprint!(concat!(stringify!($x),": {:?}, "),&($x));
+            debug!($($rest),*);
+        };
+        ( $x: expr ) => { eprintln!(concat!(stringify!($x),": {:?}"),&($x)); };
+        () => { eprintln!(); };
+    }
+    #[allow(unused_macros)]
+    #[cfg(not(debug_assertions))]
+    #[macro_export]
+    macro_rules! debug {
+        ( $($x: expr),* ) => {};
+        () => {};
+    }
+    #[macro_export]
+    macro_rules! chmin {
+        ($base:expr, $($cmps:expr),+ $(,)*) => {{
+            let cmp_min = min!($($cmps),+);
+            if $base > cmp_min {
+                $base = cmp_min;
+                true
+            } else {
+                false
+            }
+        }};
+    }
+
+    #[macro_export]
+    macro_rules! chmax {
+        ($base:expr, $($cmps:expr),+ $(,)*) => {{
+            let cmp_max = max!($($cmps),+);
+            if $base < cmp_max {
+                $base = cmp_max;
+                true
+            } else {
+                false
+            }
+        }};
+    }
+
+    #[macro_export]
+    macro_rules! min {
+        ($a:expr $(,)*) => {{
+            $a
+        }};
+        ($a:expr, $b:expr $(,)*) => {{
+            std::cmp::min($a, $b)
+        }};
+        ($a:expr, $($rest:expr),+ $(,)*) => {{
+            std::cmp::min($a, min!($($rest),+))
+        }};
+    }
+    #[macro_export]
+    macro_rules! max {
+        ($a:expr $(,)*) => {{
+            $a
+        }};
+        ($a:expr, $b:expr $(,)*) => {{
+            std::cmp::max($a, $b)
+        }};
+        ($a:expr, $($rest:expr),+ $(,)*) => {{
+            std::cmp::max($a, max!($($rest),+))
+        }};
+    }
+
+    #[macro_export]
+    macro_rules! mat {
+        ($e:expr; $d:expr) => { vec![$e; $d] };
+        ($e:expr; $d:expr $(; $ds:expr)+) => { vec![mat![$e $(; $ds)*]; $d] };
+    }
+}
+
